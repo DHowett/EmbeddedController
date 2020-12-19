@@ -303,6 +303,7 @@ const char *system_get_chip_vendor(void)
 	return "mchp";
 }
 
+#ifdef CHIP_VARIANT_MEC1701
 /*
  * MEC1701H Chip ID = 0x2D
  *              Rev = 0x82
@@ -316,6 +317,46 @@ const char *system_get_chip_name(void)
 		return "unknown";
 	}
 }
+#endif
+
+#ifdef CHIP_FAMILY_MEC152X
+/*
+ * MEC152x family implements chip ID as a 32-bit
+ * register where:
+ * b[31:16] = 16-bit Device ID
+ * b[15:8] = 8-bit Sub ID
+ * b[7:0] = Revision
+ *
+ * MEC1521-128 WFBGA 0023_33_xxh
+ * MEC1521-144 WFBGA 0023_34_xxh
+ * MEC1523-144 WFBGA 0023_B4_xxh
+ * MEC1527-144 WFBGA 0023_74_xxh
+ * MEC1527-128 WFBGA 0023_73_xxh
+ */
+const char *system_get_chip_name(void)
+{
+	switch (MCHP_CHIP_DEVRID32 & ~(MCHP_CHIP_REV_MASK)) {
+	case 0x00201400: /* 144 pin rev A? */
+		return "mec1503_revA";
+	case 0x00203400: /* 144 pin */
+		return "mec1501";
+	case 0x00207400: /* 144 pin */
+		return "mec1507";
+	case 0x00208400: /* 144 pin */
+		return "mec1503";
+	case 0x00233300: /* 128 pin */
+	case 0x00233400: /* 144 pin */
+		return "mec1521";
+	case 0x0023B400: /* 144 pin */
+		return "mec1523";
+	case 0x00237300: /* 128 pin */
+	case 0x00237400: /* 144 pin */
+		return "mec1527";
+	default:
+		return "unknown";
+	}
+}
+#endif
 
 static char to_hex(int x)
 {
