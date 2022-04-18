@@ -22,12 +22,14 @@
 #define CPRINTS(format, args...) cprints(CC_KEYBOARD, format, ## args)
 #define CPRINTF(format, args...) cprintf(CC_KEYBOARD, format, ## args)
 
+#define SCANCODE_CTRL_ESC 0x0101
+
 uint16_t scancode_set2[KEYBOARD_COLS_MAX][KEYBOARD_ROWS] = {
 		{0x0021, 0x007B, 0x0079, 0x0072, 0x007A, 0x0071, 0x0069, 0xe04A},
 		{0xe071, 0xe070, 0x007D, 0xe01f, 0x006c, 0xe06c, 0xe07d, 0x0077},
 		{0x0015, 0x0070, 0x00ff, 0x000D, 0x000E, 0x0016, 0x0067, 0x001c},
 		{0xe011, 0x0011, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
-		{0xe05a, 0x0029, 0x0024, 0x000c, 0x0058, 0x0026, 0x0004, 0xe07a},
+		{0xe05a, 0x0029, 0x0024, 0x000c, 0x0101, 0x0026, 0x0004, 0xe07a},
 		{0x0022, 0x001a, 0x0006, 0x0005, 0x001b, 0x001e, 0x001d, 0x0076},
 		{0x002A, 0x0032, 0x0034, 0x002c, 0x002e, 0x0025, 0x002d, 0x002b},
 		{0x003a, 0x0031, 0x0033, 0x0035, 0x0036, 0x003d, 0x003c, 0x003b},
@@ -416,6 +418,9 @@ int hotkey_special_key(uint16_t *key_code, int8_t pressed)
 		if (fn_table_set(pressed, KB_FN_DOWN))
 			*key_code = 0xe07a;
 		break;
+	case SCANCODE_CTRL_ESC:
+		*key_code = 0x0058;
+		break;
 	default:
 		return EC_SUCCESS;
 	}
@@ -496,6 +501,42 @@ int functional_hotkey(uint16_t *key_code, int8_t pressed)
 	return EC_SUCCESS;
 }
 
+static uint8_t ctrlesc_state = 0; // 0 = nothing, 1 = down, 2 = ctrl fired
+static void ctrlesc_fire_ctrl(void) {
+	// After 200ms, if the key is still down, fire a make for ctrl
+	if (ctrlesc_state == 1) {
+		simulate_keyboard(SCANCODE_LEFT_CTRL, 1); // MAKE CTRL
+		ctrlesc_state = 2;
+	}
+
+	// if we got here, it accidentally double-fired
+}
+DECLARE_DEFERRED(ctrlesc_fire_ctrl);
+
+int try_ctrl_esc(uint16_t *key_code, int8_t pressed) {
+	if (*key_code == SCANCODE_CTRL_ESC) {
+		if (pressed) {
+			ctrlesc_state = 1;
+			hook_call_deferred(&ctrlesc_fire_ctrl_data, 200000); // 200msec
+		} else {
+			if (ctrlesc_state == 1) {
+				// Cancel the ctrl key firing
+				hook_call_deferred(&ctrlesc_fire_ctrl_data, -1);
+
+				// Send a make/break for ESC
+				simulate_keyboard(SCANCODE_ESC, 1); // MAKE ESC
+				simulate_keyboard(SCANCODE_ESC, 0); // BREAK ESC
+			} else if (ctrlesc_state == 2) {
+				// We already sent a make for CTRL, let's send a break
+				simulate_keyboard(SCANCODE_LEFT_CTRL, 0); // BREAK CTRL
+			}
+			ctrlesc_state = 0;
+		}
+		return EC_ERROR_UNIMPLEMENTED; // placeholder to make the scan fail out
+	}
+	return EC_SUCCESS;
+}
+
 enum ec_error_list keyboard_scancode_callback(uint16_t *make_code,
 					      int8_t pressed)
 {
@@ -519,6 +560,12 @@ enum ec_error_list keyboard_scancode_callback(uint16_t *make_code,
 	 */
 	if (!pos_get_state())
 		return EC_SUCCESS;
+
+	// TODO: make FN+CAPS = Caps (we need to pre-check here whether we're
+	// tracking the Fn key state)
+	r = try_ctrl_esc(make_code, pressed);
+	if (r != EC_SUCCESS)
+		return r;
 
 	r = hotkey_F1_F12(make_code, Fn_key, pressed);
 	if (r != EC_SUCCESS)
