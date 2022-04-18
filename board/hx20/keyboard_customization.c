@@ -239,6 +239,22 @@ static uint8_t keep_fn_key_F1F12;
 static uint8_t keep_fn_key_special;
 static uint8_t keep_fn_key_functional;
 
+static void hx20_update_fnkey_led(void) {
+	// Update the CAP_LED_L GPIO to On if Fn_key contains FN_LOCKED, Off otherwise
+	gpio_set_level(GPIO_CAP_LED_L, (Fn_key & FN_LOCKED) ? 1 : 0);
+}
+
+void hx20_fnkey_suspend(void) {
+	// Turn out the lights!
+	gpio_set_level(GPIO_CAP_LED_L, 0);
+}
+DECLARE_HOOK(HOOK_CHIPSET_SUSPEND, hx20_fnkey_suspend, HOOK_PRIO_DEFAULT);
+
+void hx20_fnkey_resume(void) {
+	hx20_update_fnkey_led();
+}
+DECLARE_HOOK(HOOK_CHIPSET_RESUME, hx20_fnkey_resume, HOOK_PRIO_DEFAULT);
+
 void fnkey_shutdown(void) {
 	uint8_t current_kb = 0;
 
@@ -412,6 +428,7 @@ int functional_hotkey(uint16_t *key_code, int8_t pressed)
 			Fn_key &= ~FN_LOCKED;
 		else
 			Fn_key |= FN_LOCKED;
+		hx20_update_fnkey_led();
 		break;
 	case SCANCODE_B:
 		/* BREAK_KEY */
