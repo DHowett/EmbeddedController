@@ -16,6 +16,9 @@
 #include "hooks.h"
 #include "system.h"
 
+#include <stdarg.h>
+#include "printf.h"
+
 #include "i2c_hid_mediakeys.h"
 /* Console output macros */
 #define CPUTS(outstr) cputs(CC_KEYBOARD, outstr)
@@ -675,10 +678,10 @@ char scancode_to_char_map_base[255] = {
 };
 
 char scancode_to_char_map_shift[255] = {
-	[0x0e] = '~', [0x15] = 'Q', [0x16] = '1', [0x1a] = 'Z', [0x1b] = 'S', [0x1c] = 'A', [0x1d] = 'W', [0x1e] = '2', [0x21] = 'C', [0x22] = 'X', [0x23] = 'D', [0x24] = 'E', [0x25] = '4', [0x26] = '3', [0x29] = ' ',
-	[0x2a] = 'V', [0x2b] = 'F', [0x2c] = 'T', [0x2d] = 'R', [0x2e] = '5', [0x31] = 'N', [0x32] = 'B', [0x33] = 'H', [0x34] = 'G', [0x35] = 'Y', [0x36] = '6', [0x3a] = 'M', [0x3b] = 'J', [0x3c] = 'U', [0x3d] = '7',
-	[0x3e] = '8', [0x41] = '<', [0x42] = 'K', [0x43] = 'I', [0x44] = 'O', [0x45] = '0', [0x46] = '9', [0x49] = '>', [0x4a] = '?', [0x4b] = 'L', [0x4c] = ':', [0x4d] = 'P', [0x4e] = '_', [0x52] = '\'', [0x54] = '{',
-	[0x55] = '+', [0x5a] = '\n', [0x5b] = '}', [0x5d] = '|', [0x66] = '\x08', [0x76] = '\x1b',
+	[0x0e] = '~', [0x15] = 'Q', [0x16] = '!', [0x1a] = 'Z', [0x1b] = 'S', [0x1c] = 'A', [0x1d] = 'W', [0x1e] = '@', [0x21] = 'C', [0x22] = 'X', [0x23] = 'D', [0x24] = 'E', [0x25] = '$', [0x26] = '#', [0x2a] = 'V',
+	[0x2b] = 'F', [0x2c] = 'T', [0x2d] = 'R', [0x2e] = '%', [0x31] = 'N', [0x32] = 'B', [0x33] = 'H', [0x34] = 'G', [0x35] = 'Y', [0x36] = '^', [0x3a] = 'M', [0x3b] = 'J', [0x3c] = 'U', [0x3d] = '&', [0x3e] = '*',
+	[0x41] = '<', [0x42] = 'K', [0x43] = 'I', [0x44] = 'O', [0x45] = ')', [0x46] = '(', [0x49] = '>', [0x4a] = '?', [0x4b] = 'L', [0x4c] = ':', [0x4d] = 'P', [0x4e] = '_', [0x52] = '"', [0x54] = '{', [0x55] = '+',
+	[0x5b] = '}', [0x5d] = '|',
 };
 
 char scancode_to_char_map_ctrl[255] = {
@@ -689,26 +692,22 @@ char scancode_to_char_map_ctrl[255] = {
 
 // we will deal with high scancodes later
 uint16_t char_to_scancode_map[255] = {
-	['\t'] = 0x0d, ['`'] = 0x0e, ['q'] = 0x15, ['1'] = 0x16, ['z'] = 0x1a, ['s'] = 0x1b, ['a'] = 0x1c, ['w'] = 0x1d, ['2'] = 0x1e, ['c'] = 0x21, ['x'] = 0x22, ['d'] = 0x23, ['e'] = 0x24, ['4'] = 0x25, ['3'] = 0x26,
-	[' '] = 0x29, ['v'] = 0x2a, ['f'] = 0x2b, ['t'] = 0x2c, ['r'] = 0x2d, ['5'] = 0x2e, ['n'] = 0x31, ['b'] = 0x32, ['h'] = 0x33, ['g'] = 0x34, ['y'] = 0x35, ['6'] = 0x36, ['m'] = 0x3a, ['j'] = 0x3b, ['u'] = 0x3c,
-	['7'] = 0x3d, ['8'] = 0x3e, [','] = 0x41, ['k'] = 0x42, ['i'] = 0x43, ['o'] = 0x44, ['0'] = 0x45, ['9'] = 0x46, ['.'] = 0x49, ['/'] = 0x4a, ['l'] = 0x4b, [';'] = 0x4c, ['p'] = 0x4d, ['-'] = 0x4e, ['\''] = 0x52,
-	['['] = 0x54, ['='] = 0x55, ['\n'] = 0x5a, [']'] = 0x5b, ['\\'] = 0x5d, ['\x08'] = 0x66, ['\x1b'] = 0x76, ['~'] = SHIFTED(0x0e), ['Q'] = SHIFTED(0x15), ['1'] = SHIFTED(0x16), ['Z'] = SHIFTED(0x1a), ['S'] = SHIFTED(0x1b), ['A'] = SHIFTED(0x1c), ['W'] = SHIFTED(0x1d), ['2'] = SHIFTED(0x1e),
-	['C'] = SHIFTED(0x21), ['X'] = SHIFTED(0x22), ['D'] = SHIFTED(0x23), ['E'] = SHIFTED(0x24), ['4'] = SHIFTED(0x25), ['3'] = SHIFTED(0x26), [' '] = SHIFTED(0x29), ['V'] = SHIFTED(0x2a), ['F'] = SHIFTED(0x2b), ['T'] = SHIFTED(0x2c), ['R'] = SHIFTED(0x2d), ['5'] = SHIFTED(0x2e), ['N'] = SHIFTED(0x31), ['B'] = SHIFTED(0x32), ['H'] = SHIFTED(0x33),
-	['G'] = SHIFTED(0x34), ['Y'] = SHIFTED(0x35), ['6'] = SHIFTED(0x36), ['M'] = SHIFTED(0x3a), ['J'] = SHIFTED(0x3b), ['U'] = SHIFTED(0x3c), ['7'] = SHIFTED(0x3d), ['8'] = SHIFTED(0x3e), ['<'] = SHIFTED(0x41), ['K'] = SHIFTED(0x42), ['I'] = SHIFTED(0x43), ['O'] = SHIFTED(0x44), ['0'] = SHIFTED(0x45), ['9'] = SHIFTED(0x46), ['>'] = SHIFTED(0x49),
-	['?'] = SHIFTED(0x4a), ['L'] = SHIFTED(0x4b), [':'] = SHIFTED(0x4c), ['P'] = SHIFTED(0x4d), ['_'] = SHIFTED(0x4e), ['\''] = SHIFTED(0x52), ['{'] = SHIFTED(0x54), ['+'] = SHIFTED(0x55), ['\n'] = SHIFTED(0x5a), ['}'] = SHIFTED(0x5b), ['|'] = SHIFTED(0x5d), [0x1f & 'Q'] = CTRLED(0x15), [0x1f & '1'] = CTRLED(0x16), [0x1f & 'Z'] = CTRLED(0x1a), [0x1f & 'S'] = CTRLED(0x1b),
-	[0x1f & 'A'] = CTRLED(0x1c), [0x1f & 'W'] = CTRLED(0x1d), [0x1f & '2'] = CTRLED(0x1e), [0x1f & 'C'] = CTRLED(0x21), [0x1f & 'X'] = CTRLED(0x22), [0x1f & 'D'] = CTRLED(0x23), [0x1f & 'E'] = CTRLED(0x24), [0x1f & '4'] = CTRLED(0x25), [0x1f & '3'] = CTRLED(0x26), [0x1f & 'V'] = CTRLED(0x2a), [0x1f & 'F'] = CTRLED(0x2b), [0x1f & 'T'] = CTRLED(0x2c), [0x1f & 'R'] = CTRLED(0x2d), [0x1f & '5'] = CTRLED(0x2e), [0x1f & 'N'] = CTRLED(0x31),
-	[0x1f & 'B'] = CTRLED(0x32), [0x1f & 'H'] = CTRLED(0x33), [0x1f & 'G'] = CTRLED(0x34), [0x1f & 'Y'] = CTRLED(0x35), [0x1f & '6'] = CTRLED(0x36), [0x1f & 'M'] = CTRLED(0x3a), [0x1f & 'J'] = CTRLED(0x3b), [0x1f & 'U'] = CTRLED(0x3c), [0x1f & '7'] = CTRLED(0x3d), [0x1f & '8'] = CTRLED(0x3e), [0x1f & 'K'] = CTRLED(0x42), [0x1f & 'I'] = CTRLED(0x43), [0x1f & 'O'] = CTRLED(0x44), [0x1f & '0'] = CTRLED(0x45), [0x1f & '9'] = CTRLED(0x46),
-	[0x1f & 'L'] = CTRLED(0x4b), [0x1f & 'P'] = CTRLED(0x4d),
+	['-'] = 0x4e, [' '] = 0x29, ['!'] = SHIFTED(0x16), ['"'] = SHIFTED(0x52), ['#'] = SHIFTED(0x26), ['$'] = SHIFTED(0x25), ['%'] = SHIFTED(0x2e), ['&'] = SHIFTED(0x3d), ['('] = SHIFTED(0x46), [')'] = SHIFTED(0x45), ['*'] = SHIFTED(0x3e), [','] = 0x41, ['.'] = 0x49, ['/'] = 0x4a, [':'] = SHIFTED(0x4c),
+	[';'] = 0x4c, ['?'] = SHIFTED(0x4a), ['@'] = SHIFTED(0x1e), ['['] = 0x54, ['\''] = 0x52, ['\\'] = 0x5d, ['\n'] = 0x5a, ['\t'] = 0x0d, ['\x08'] = 0x66, ['\x1b'] = 0x76, [']'] = 0x5b, ['^'] = SHIFTED(0x36), ['_'] = SHIFTED(0x4e), ['`'] = 0x0e, ['{'] = SHIFTED(0x54),
+	['|'] = SHIFTED(0x5d), ['}'] = SHIFTED(0x5b), ['~'] = SHIFTED(0x0e), ['+'] = SHIFTED(0x55), ['<'] = SHIFTED(0x41), ['='] = 0x55, ['>'] = SHIFTED(0x49), ['0'] = 0x45, ['1'] = 0x16, ['2'] = 0x1e, ['3'] = 0x26, ['4'] = 0x25, ['5'] = 0x2e, ['6'] = 0x36, ['7'] = 0x3d,
+	['8'] = 0x3e, ['9'] = 0x46, ['a'] = 0x1c, ['A'] = SHIFTED(0x1c), ['b'] = 0x32, ['B'] = SHIFTED(0x32), ['c'] = 0x21, ['C'] = SHIFTED(0x21), ['d'] = 0x23, ['D'] = SHIFTED(0x23), ['e'] = 0x24, ['E'] = SHIFTED(0x24), ['f'] = 0x2b, ['F'] = SHIFTED(0x2b), ['g'] = 0x34,
+	['G'] = SHIFTED(0x34), ['h'] = 0x33, ['H'] = SHIFTED(0x33), ['i'] = 0x43, ['I'] = SHIFTED(0x43), ['j'] = 0x3b, ['J'] = SHIFTED(0x3b), ['k'] = 0x42, ['K'] = SHIFTED(0x42), ['l'] = 0x4b, ['L'] = SHIFTED(0x4b), ['m'] = 0x3a, ['M'] = SHIFTED(0x3a), ['n'] = 0x31, ['N'] = SHIFTED(0x31),
+	['o'] = 0x44, ['O'] = SHIFTED(0x44), ['p'] = 0x4d, ['P'] = SHIFTED(0x4d), ['q'] = 0x15, ['Q'] = SHIFTED(0x15), ['r'] = 0x2d, ['R'] = SHIFTED(0x2d), ['s'] = 0x1b, ['S'] = SHIFTED(0x1b), ['t'] = 0x2c, ['T'] = SHIFTED(0x2c), ['u'] = 0x3c, ['U'] = SHIFTED(0x3c), ['v'] = 0x2a,
+	['V'] = SHIFTED(0x2a), ['w'] = 0x1d, ['W'] = SHIFTED(0x1d), ['x'] = 0x22, ['X'] = SHIFTED(0x22), ['y'] = 0x35, ['Y'] = SHIFTED(0x35), ['z'] = 0x1a, ['Z'] = SHIFTED(0x1a),
 };
 
 int board_console_getc(void) {
-	uint8_t next = (console_buf_rd + 1) % CON_BUF_SIZE;
 	int ch = 0;
 	if (console_buf_rd == console_buf_wr) {
 		return -1;
 	}
 	ch = console_buf[console_buf_rd];
-	console_buf_rd = next;
+	console_buf_rd = (console_buf_rd + 1) % CON_BUF_SIZE;
 	return ch;
 }
 
@@ -719,20 +718,50 @@ int board_console_putc(int ch) {
 		if (!v) {
 			return EC_SUCCESS;
 		}
-		if (SHIFTED(v)) {
+		if (GET_MOD(v) & CON_MOD_SHIFT) {
 			simulate_keyboard(SCANCODE_LEFT_SHIFT, 1);
 		}
-		if (CTRLED(v)) {
+		/*
+		if (GET_MOD(v) & CON_MOD_CTRL) {
 			simulate_keyboard(SCANCODE_LEFT_CTRL, 1);
 		}
+		*/
 		simulate_keyboard(v & 0xff, 1);
 		simulate_keyboard(v & 0xff, 0);
-		if (CTRLED(v)) {
+		/*
+		if (GET_MOD(v) & CON_MOD_CTRL) {
 			simulate_keyboard(SCANCODE_LEFT_CTRL, 0);
 		}
-		if (SHIFTED(v)) {
+		*/
+		if (GET_MOD(v) & CON_MOD_SHIFT) {
 			simulate_keyboard(SCANCODE_LEFT_SHIFT, 0);
 		}
+		usleep(1000); // Give the keyboard protocol task time to drain
+	}
+	return EC_SUCCESS;
+}
+
+int board_console_puts(const char* outstr) {
+	if (console_keyboard_mode) {
+		/* Put all characters in the output buffer */
+		while (*outstr) {
+			if (board_console_putc(*outstr++) != 0)
+				break;
+		}
+
+		/* Successful if we consumed all output */
+		return *outstr ? EC_ERROR_OVERFLOW : EC_SUCCESS;
+	}
+	return EC_SUCCESS;
+}
+
+static int __tx_char(void* context, int c) {
+	return board_console_putc(c);
+}
+
+int board_console_vprintf(const char* format, va_list args) {
+	if (console_keyboard_mode) {
+		return vfnprintf(__tx_char, NULL, format, args);
 	}
 	return EC_SUCCESS;
 }
@@ -749,8 +778,8 @@ int try_console_enqueue_inner(uint16_t code, int8_t pressed) {
 		return EC_SUCCESS; // let this one pass through; alt is an escape hatch to the system
 	}
 
-	if (code > 0xFF) {
-		return EC_ERROR_UNIMPLEMENTED; // drop
+	if (code > 0xFF || !pressed) {
+		return EC_ERROR_UNIMPLEMENTED; // drop high codes and releases
 	}
 
 	ch = table[code & 0xFF];
@@ -763,8 +792,8 @@ int try_console_enqueue_inner(uint16_t code, int8_t pressed) {
 	if (((console_buf_wr + 1) % CON_BUF_SIZE) == console_buf_rd) {
 		return EC_ERROR_UNIMPLEMENTED; // drop
 	}
-	console_buf_wr = (console_buf_wr + 1) % CON_BUF_SIZE;
 	console_buf[console_buf_wr] = ch;
+	console_buf_wr = (console_buf_wr + 1) % CON_BUF_SIZE;
 	console_has_input();
 	return EC_ERROR_UNIMPLEMENTED; // kill the event!
 }
@@ -780,8 +809,10 @@ int try_console_enqueue(uint16_t* make_code, int8_t pressed) {
 		return EC_SUCCESS; // let FN through
 	
 	if (code == SCANCODE_F12 && pressed) {
+		// we must do this when pressed, otherwise we'll immediately disable on the next release
 		console_keyboard_mode = 0; // kill console mode
-		return EC_SUCCESS; // let it fall through to emit the press/release
+		return EC_ERROR_UNIMPLEMENTED; // do not send the release event downstream
+					       // If we do, the fn+f12 handler will turn console back on
 	}
 
 	switch (code) {

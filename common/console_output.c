@@ -40,9 +40,12 @@ BUILD_ASSERT(CC_CHANNEL_COUNT <= 8*sizeof(uint32_t));
 /*****************************************************************************/
 /* Channel-based console output */
 
+__attribute__((weak)) int board_console_puts(const char* outstr) { return EC_SUCCESS; }
+__attribute__((weak)) int board_console_vprintf(const char* outstr, va_list args) { return EC_SUCCESS; }
+
 int cputs(enum console_channel channel, const char *outstr)
 {
-	int rv1, rv2;
+	int rv1, rv2, rv3;
 
 #ifdef CONFIG_CONSOLE_CHANNEL
 	/* Filter out inactive channels */
@@ -52,13 +55,14 @@ int cputs(enum console_channel channel, const char *outstr)
 
 	rv1 = usb_puts(outstr);
 	rv2 = uart_puts(outstr);
+	rv3 = board_console_puts(outstr);
 
-	return rv1 == EC_SUCCESS ? rv2 : rv1;
+	return rv1 == EC_SUCCESS ? rv2 == EC_SUCCESS ? rv3 : rv2 : rv1;
 }
 
 int cprintf(enum console_channel channel, const char *format, ...)
 {
-	int rv1, rv2;
+	int rv1, rv2, rv3;
 	va_list args;
 
 #ifdef CONFIG_CONSOLE_CHANNEL
@@ -75,7 +79,11 @@ int cprintf(enum console_channel channel, const char *format, ...)
 	rv2 = uart_vprintf(format, args);
 	va_end(args);
 
-	return rv1 == EC_SUCCESS ? rv2 : rv1;
+	va_start(args, format);
+	rv3 = board_console_vprintf(format, args);
+	va_end(args);
+
+	return rv1 == EC_SUCCESS ? rv2 == EC_SUCCESS ? rv3 : rv2 : rv1;
 }
 
 int cprints(enum console_channel channel, const char *format, ...)
@@ -102,6 +110,12 @@ int cprints(enum console_channel channel, const char *format, ...)
 	if (r)
 		rv = r;
 	usb_va_end(args);
+
+	va_start(args, format);
+	r = board_console_vprintf(format, args);
+	if (r)
+		rv = r;
+	va_end(args);
 
 	r = cputs(channel, "]\n");
 	return r ? r : rv;
