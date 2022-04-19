@@ -71,6 +71,9 @@ enum extended_key_code {
 	KEY_DEL
 };
 
+__attribute__((weak)) int board_console_getc(void) { return -1; }
+__attribute__((weak)) int board_console_putc(int ch) { return EC_SUCCESS; }
+
 /**
  * Split a line of input into words.
  *
@@ -281,8 +284,9 @@ static int console_putc(int c)
 {
 	int rv1 = uart_putc(c);
 	int rv2 = usb_putc(c);
+	int rv3 = board_console_putc(c);
 
-	return rv1 == EC_SUCCESS ? rv2 : rv1;
+	return rv1 == EC_SUCCESS ? rv2 == EC_SUCCESS ? rv3 : rv2 : rv1;
 }
 
 #ifndef CONFIG_EXPERIMENTAL_CONSOLE
@@ -664,6 +668,13 @@ void console_task(void *u)
 
 		while (1) {
 			c = usb_getc();
+			if (c == -1)
+				break;
+			console_handle_char(c);
+		}
+
+		while (1) {
+			c = board_console_getc();
 			if (c == -1)
 				break;
 			console_handle_char(c);

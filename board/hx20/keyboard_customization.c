@@ -24,6 +24,9 @@
 
 #define SCANCODE_CTRL_ESC 0x0101
 
+static uint8_t console_keyboard_mode;
+int try_console_enqueue(uint16_t* make_code, int8_t pressed);
+
 uint16_t scancode_set2[KEYBOARD_COLS_MAX][KEYBOARD_ROWS] = {
 		{0x0021, 0x007B, 0x0079, 0x0072, 0x007A, 0x0071, 0x0069, 0xe04A},
 		{0xe071, 0xe070, 0x007D, 0xe01f, 0x006c, 0xe06c, 0xe07d, 0x0077},
@@ -375,8 +378,15 @@ int hotkey_F1_F12(uint16_t *key_code, uint16_t fn, int8_t pressed)
 		break;
 	case SCANCODE_F12:  /* TODO: FRAMEWORK */
 		/* Media Select scan code */
-		if (fn_table_media_set(pressed, KB_FN_F12))
-			*key_code = 0xE050;
+		if (fn_table_media_set(pressed, KB_FN_F12)) {
+			//*key_code = 0xE050;
+			if (pressed) {
+				console_keyboard_mode = 1;
+				ccputs("EC Keyboard Console\n");
+				ccputs("> ");
+			}
+			return EC_ERROR_UNIMPLEMENTED; // eat the event, always
+		}
 		break;
 	default:
 		return EC_SUCCESS;
@@ -567,6 +577,10 @@ enum ec_error_list keyboard_scancode_callback(uint16_t *make_code,
 	if (r != EC_SUCCESS)
 		return r;
 
+	r = try_console_enqueue(make_code, pressed);
+	if (r != EC_SUCCESS)
+		return r;
+
 	r = hotkey_F1_F12(make_code, Fn_key, pressed);
 	if (r != EC_SUCCESS)
 		return r;
@@ -638,3 +652,164 @@ int factory_status(void)
 }
 
 #endif
+
+#define CON_MOD_SHIFT 0x1
+#define CON_MOD_CTRL  0x2
+#define CON_MOD_ALT   0x4
+#define GET_MOD(v)    ((0xFF00 & (v)) >> 8)
+#define SHIFTED(v)    ((CON_MOD_SHIFT << 8) | v)
+#define CTRLED(v)     ((CON_MOD_CTRL << 8) | v)
+#define ALTED(v)      ((CON_MOD_ALT << 8) | v)
+#define CON_BUF_SIZE  16
+#define SCANCODE_LEFT_SHIFT 0x12
+#define SCANCODE_RIGHT_SHIFT 0x59
+static char console_buf[CON_BUF_SIZE];
+static uint8_t console_buf_wr, console_buf_rd, console_current_mod;
+
+// no high scancodes here either
+char scancode_to_char_map_base[255] = {
+	[0x0d] = '\t', [0x0e] = '`', [0x15] = 'q', [0x16] = '1', [0x1a] = 'z', [0x1b] = 's', [0x1c] = 'a', [0x1d] = 'w', [0x1e] = '2', [0x21] = 'c', [0x22] = 'x', [0x23] = 'd', [0x24] = 'e', [0x25] = '4', [0x26] = '3',
+	[0x29] = ' ', [0x2a] = 'v', [0x2b] = 'f', [0x2c] = 't', [0x2d] = 'r', [0x2e] = '5', [0x31] = 'n', [0x32] = 'b', [0x33] = 'h', [0x34] = 'g', [0x35] = 'y', [0x36] = '6', [0x3a] = 'm', [0x3b] = 'j', [0x3c] = 'u',
+	[0x3d] = '7', [0x3e] = '8', [0x41] = ',', [0x42] = 'k', [0x43] = 'i', [0x44] = 'o', [0x45] = '0', [0x46] = '9', [0x49] = '.', [0x4a] = '/', [0x4b] = 'l', [0x4c] = ';', [0x4d] = 'p', [0x4e] = '-', [0x52] = '\'',
+	[0x54] = '[', [0x55] = '=', [0x5a] = '\n', [0x5b] = ']', [0x5d] = '\\', [0x66] = '\x08', [0x76] = '\x1b',
+};
+
+char scancode_to_char_map_shift[255] = {
+	[0x0e] = '~', [0x15] = 'Q', [0x16] = '1', [0x1a] = 'Z', [0x1b] = 'S', [0x1c] = 'A', [0x1d] = 'W', [0x1e] = '2', [0x21] = 'C', [0x22] = 'X', [0x23] = 'D', [0x24] = 'E', [0x25] = '4', [0x26] = '3', [0x29] = ' ',
+	[0x2a] = 'V', [0x2b] = 'F', [0x2c] = 'T', [0x2d] = 'R', [0x2e] = '5', [0x31] = 'N', [0x32] = 'B', [0x33] = 'H', [0x34] = 'G', [0x35] = 'Y', [0x36] = '6', [0x3a] = 'M', [0x3b] = 'J', [0x3c] = 'U', [0x3d] = '7',
+	[0x3e] = '8', [0x41] = '<', [0x42] = 'K', [0x43] = 'I', [0x44] = 'O', [0x45] = '0', [0x46] = '9', [0x49] = '>', [0x4a] = '?', [0x4b] = 'L', [0x4c] = ':', [0x4d] = 'P', [0x4e] = '_', [0x52] = '\'', [0x54] = '{',
+	[0x55] = '+', [0x5a] = '\n', [0x5b] = '}', [0x5d] = '|', [0x66] = '\x08', [0x76] = '\x1b',
+};
+
+char scancode_to_char_map_ctrl[255] = {
+	[0x15] = 0x1f & 'Q', [0x16] = 0x1f & '1', [0x1a] = 0x1f & 'Z', [0x1b] = 0x1f & 'S', [0x1c] = 0x1f & 'A', [0x1d] = 0x1f & 'W', [0x1e] = 0x1f & '2', [0x21] = 0x1f & 'C', [0x22] = 0x1f & 'X', [0x23] = 0x1f & 'D', [0x24] = 0x1f & 'E', [0x25] = 0x1f & '4', [0x26] = 0x1f & '3', [0x2a] = 0x1f & 'V', [0x2b] = 0x1f & 'F',
+	[0x2c] = 0x1f & 'T', [0x2d] = 0x1f & 'R', [0x2e] = 0x1f & '5', [0x31] = 0x1f & 'N', [0x32] = 0x1f & 'B', [0x33] = 0x1f & 'H', [0x34] = 0x1f & 'G', [0x35] = 0x1f & 'Y', [0x36] = 0x1f & '6', [0x3a] = 0x1f & 'M', [0x3b] = 0x1f & 'J', [0x3c] = 0x1f & 'U', [0x3d] = 0x1f & '7', [0x3e] = 0x1f & '8', [0x42] = 0x1f & 'K',
+	[0x43] = 0x1f & 'I', [0x44] = 0x1f & 'O', [0x45] = 0x1f & '0', [0x46] = 0x1f & '9', [0x4b] = 0x1f & 'L', [0x4d] = 0x1f & 'P',
+};
+
+// we will deal with high scancodes later
+uint16_t char_to_scancode_map[255] = {
+	['\t'] = 0x0d, ['`'] = 0x0e, ['q'] = 0x15, ['1'] = 0x16, ['z'] = 0x1a, ['s'] = 0x1b, ['a'] = 0x1c, ['w'] = 0x1d, ['2'] = 0x1e, ['c'] = 0x21, ['x'] = 0x22, ['d'] = 0x23, ['e'] = 0x24, ['4'] = 0x25, ['3'] = 0x26,
+	[' '] = 0x29, ['v'] = 0x2a, ['f'] = 0x2b, ['t'] = 0x2c, ['r'] = 0x2d, ['5'] = 0x2e, ['n'] = 0x31, ['b'] = 0x32, ['h'] = 0x33, ['g'] = 0x34, ['y'] = 0x35, ['6'] = 0x36, ['m'] = 0x3a, ['j'] = 0x3b, ['u'] = 0x3c,
+	['7'] = 0x3d, ['8'] = 0x3e, [','] = 0x41, ['k'] = 0x42, ['i'] = 0x43, ['o'] = 0x44, ['0'] = 0x45, ['9'] = 0x46, ['.'] = 0x49, ['/'] = 0x4a, ['l'] = 0x4b, [';'] = 0x4c, ['p'] = 0x4d, ['-'] = 0x4e, ['\''] = 0x52,
+	['['] = 0x54, ['='] = 0x55, ['\n'] = 0x5a, [']'] = 0x5b, ['\\'] = 0x5d, ['\x08'] = 0x66, ['\x1b'] = 0x76, ['~'] = SHIFTED(0x0e), ['Q'] = SHIFTED(0x15), ['1'] = SHIFTED(0x16), ['Z'] = SHIFTED(0x1a), ['S'] = SHIFTED(0x1b), ['A'] = SHIFTED(0x1c), ['W'] = SHIFTED(0x1d), ['2'] = SHIFTED(0x1e),
+	['C'] = SHIFTED(0x21), ['X'] = SHIFTED(0x22), ['D'] = SHIFTED(0x23), ['E'] = SHIFTED(0x24), ['4'] = SHIFTED(0x25), ['3'] = SHIFTED(0x26), [' '] = SHIFTED(0x29), ['V'] = SHIFTED(0x2a), ['F'] = SHIFTED(0x2b), ['T'] = SHIFTED(0x2c), ['R'] = SHIFTED(0x2d), ['5'] = SHIFTED(0x2e), ['N'] = SHIFTED(0x31), ['B'] = SHIFTED(0x32), ['H'] = SHIFTED(0x33),
+	['G'] = SHIFTED(0x34), ['Y'] = SHIFTED(0x35), ['6'] = SHIFTED(0x36), ['M'] = SHIFTED(0x3a), ['J'] = SHIFTED(0x3b), ['U'] = SHIFTED(0x3c), ['7'] = SHIFTED(0x3d), ['8'] = SHIFTED(0x3e), ['<'] = SHIFTED(0x41), ['K'] = SHIFTED(0x42), ['I'] = SHIFTED(0x43), ['O'] = SHIFTED(0x44), ['0'] = SHIFTED(0x45), ['9'] = SHIFTED(0x46), ['>'] = SHIFTED(0x49),
+	['?'] = SHIFTED(0x4a), ['L'] = SHIFTED(0x4b), [':'] = SHIFTED(0x4c), ['P'] = SHIFTED(0x4d), ['_'] = SHIFTED(0x4e), ['\''] = SHIFTED(0x52), ['{'] = SHIFTED(0x54), ['+'] = SHIFTED(0x55), ['\n'] = SHIFTED(0x5a), ['}'] = SHIFTED(0x5b), ['|'] = SHIFTED(0x5d), [0x1f & 'Q'] = CTRLED(0x15), [0x1f & '1'] = CTRLED(0x16), [0x1f & 'Z'] = CTRLED(0x1a), [0x1f & 'S'] = CTRLED(0x1b),
+	[0x1f & 'A'] = CTRLED(0x1c), [0x1f & 'W'] = CTRLED(0x1d), [0x1f & '2'] = CTRLED(0x1e), [0x1f & 'C'] = CTRLED(0x21), [0x1f & 'X'] = CTRLED(0x22), [0x1f & 'D'] = CTRLED(0x23), [0x1f & 'E'] = CTRLED(0x24), [0x1f & '4'] = CTRLED(0x25), [0x1f & '3'] = CTRLED(0x26), [0x1f & 'V'] = CTRLED(0x2a), [0x1f & 'F'] = CTRLED(0x2b), [0x1f & 'T'] = CTRLED(0x2c), [0x1f & 'R'] = CTRLED(0x2d), [0x1f & '5'] = CTRLED(0x2e), [0x1f & 'N'] = CTRLED(0x31),
+	[0x1f & 'B'] = CTRLED(0x32), [0x1f & 'H'] = CTRLED(0x33), [0x1f & 'G'] = CTRLED(0x34), [0x1f & 'Y'] = CTRLED(0x35), [0x1f & '6'] = CTRLED(0x36), [0x1f & 'M'] = CTRLED(0x3a), [0x1f & 'J'] = CTRLED(0x3b), [0x1f & 'U'] = CTRLED(0x3c), [0x1f & '7'] = CTRLED(0x3d), [0x1f & '8'] = CTRLED(0x3e), [0x1f & 'K'] = CTRLED(0x42), [0x1f & 'I'] = CTRLED(0x43), [0x1f & 'O'] = CTRLED(0x44), [0x1f & '0'] = CTRLED(0x45), [0x1f & '9'] = CTRLED(0x46),
+	[0x1f & 'L'] = CTRLED(0x4b), [0x1f & 'P'] = CTRLED(0x4d),
+};
+
+int board_console_getc(void) {
+	uint8_t next = (console_buf_rd + 1) % CON_BUF_SIZE;
+	int ch = 0;
+	if (console_buf_rd == console_buf_wr) {
+		return -1;
+	}
+	ch = console_buf[console_buf_rd];
+	console_buf_rd = next;
+	return ch;
+}
+
+int board_console_putc(int ch) {
+	if (console_keyboard_mode) {
+		uint16_t v = char_to_scancode_map[ch];
+
+		if (!v) {
+			return EC_SUCCESS;
+		}
+		if (SHIFTED(v)) {
+			simulate_keyboard(SCANCODE_LEFT_SHIFT, 1);
+		}
+		if (CTRLED(v)) {
+			simulate_keyboard(SCANCODE_LEFT_CTRL, 1);
+		}
+		simulate_keyboard(v & 0xff, 1);
+		simulate_keyboard(v & 0xff, 0);
+		if (CTRLED(v)) {
+			simulate_keyboard(SCANCODE_LEFT_CTRL, 0);
+		}
+		if (SHIFTED(v)) {
+			simulate_keyboard(SCANCODE_LEFT_SHIFT, 0);
+		}
+	}
+	return EC_SUCCESS;
+}
+
+int try_console_enqueue_inner(uint16_t code, int8_t pressed) {
+	char* table = scancode_to_char_map_base;
+	char ch = '\0';
+
+	if (console_current_mod & CON_MOD_SHIFT) {
+		table = scancode_to_char_map_shift;
+	} else if (console_current_mod & CON_MOD_CTRL) {
+		table = scancode_to_char_map_ctrl;
+	} else if (console_current_mod & CON_MOD_ALT) {
+		return EC_SUCCESS; // let this one pass through; alt is an escape hatch to the system
+	}
+
+	if (code > 0xFF) {
+		return EC_ERROR_UNIMPLEMENTED; // drop
+	}
+
+	ch = table[code & 0xFF];
+
+	if (!ch) {
+		return EC_ERROR_UNIMPLEMENTED;
+	}
+
+	// if the reader catches up to the writer, drop this event
+	if (((console_buf_wr + 1) % CON_BUF_SIZE) == console_buf_rd) {
+		return EC_ERROR_UNIMPLEMENTED; // drop
+	}
+	console_buf_wr = (console_buf_wr + 1) % CON_BUF_SIZE;
+	console_buf[console_buf_wr] = ch;
+	console_has_input();
+	return EC_ERROR_UNIMPLEMENTED; // kill the event!
+}
+
+int try_console_enqueue(uint16_t* make_code, int8_t pressed) {
+	uint16_t code = *make_code;
+
+	if (!console_keyboard_mode) {
+		return EC_SUCCESS;
+	}
+
+	if (code == SCANCODE_FN)
+		return EC_SUCCESS; // let FN through
+	
+	if (code == SCANCODE_F12 && pressed) {
+		console_keyboard_mode = 0; // kill console mode
+		return EC_SUCCESS; // let it fall through to emit the press/release
+	}
+
+	switch (code) {
+		case SCANCODE_LEFT_CTRL:
+		case SCANCODE_RIGHT_CTRL:
+			if (pressed)
+				console_current_mod |= CON_MOD_CTRL;
+			else
+				console_current_mod &= ~CON_MOD_CTRL;
+			break;
+		case SCANCODE_LEFT_SHIFT:
+		case SCANCODE_RIGHT_SHIFT:
+			if (pressed)
+				console_current_mod |= CON_MOD_SHIFT;
+			else
+				console_current_mod &= ~CON_MOD_SHIFT;
+			break;
+		case SCANCODE_LEFT_ALT:
+		case SCANCODE_RIGHT_ALT:
+			if (pressed)
+				console_current_mod |= CON_MOD_ALT;
+			else
+				console_current_mod &= ~CON_MOD_ALT;
+			break;
+		default:
+			return try_console_enqueue_inner(code, pressed);
+
+	}
+
+	return EC_ERROR_UNIMPLEMENTED; // EAT THE EVENT, WE SENT IT TO THE CONSOLE
+}
