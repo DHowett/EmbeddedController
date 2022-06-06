@@ -344,12 +344,21 @@ static void scancode_bytes(uint16_t make_code, int8_t pressed,
 	}
 }
 
+__attribute__((weak))
+int8_t process_record_overload(int8_t row, int8_t col, int8_t pressed, uint16_t* make_code) {
+	// 0 = not installed
+	// 1 = make_code populated
+	// 2 = drop event
+	return 0;
+}
+
 static enum ec_error_list matrix_callback(int8_t row, int8_t col,
 					  int8_t pressed,
 					  enum scancode_set_list code_set,
 					  uint8_t *scan_code, int32_t *len)
 {
 	uint16_t make_code;
+	int8_t overload;
 
 	ASSERT(scan_code);
 	ASSERT(len);
@@ -357,7 +366,14 @@ static enum ec_error_list matrix_callback(int8_t row, int8_t col,
 	if (row >= KEYBOARD_ROWS || col >= keyboard_cols)
 		return EC_ERROR_INVAL;
 
-	make_code = get_scancode_set2(row, col);
+	overload = process_record_overload(row, col, pressed, &make_code);
+	if (overload == 2) {
+		return EC_ERROR_UNIMPLEMENTED;
+	}
+
+	if (overload == 0) {
+		make_code = get_scancode_set2(row, col);
+	}
 
 #ifdef CONFIG_KEYBOARD_SCANCODE_CALLBACK
 	{
