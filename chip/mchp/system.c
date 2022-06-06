@@ -53,6 +53,7 @@ enum hibdata_index {
 	HIBDATA_INDEX_VPRO_STATUS = 35,
 	HIBDATA_INDEX_CHASSIS_WAS_OPEN = 36,
 	HIBDATA_INDEX_FP_LED_LEVEL = 37,
+	HIBDATA_INDEX_KEYBOARD_OVERDRIVE_STATE = 38,
 	/*
 	 * .. 56 ~ 59 byte for ESPI VW use ..
 	 * .. 60 ~ 63 byte for IMAGETYPE use ..
@@ -371,6 +372,8 @@ static int bbram_idx_lookup(enum system_bbram_idx idx)
 		return HIBDATA_INDEX_CHASSIS_WAS_OPEN;
 	case STSTEM_BBRAM_IDX_FP_LED_LEVEL:
 		return HIBDATA_INDEX_FP_LED_LEVEL;
+	case SYSTEM_BBRAM_IDX_KEYBOARD_OVERDRIVE_STATE:
+		return HIBDATA_INDEX_KEYBOARD_OVERDRIVE_STATE;
 	default:
 		return -1;
 	}
