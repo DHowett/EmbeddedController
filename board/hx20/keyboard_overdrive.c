@@ -283,6 +283,29 @@ int8_t process_record_overload(int8_t row, int8_t col, int8_t pressed, uint16_t*
 	return 2;
 }
 
+static void keyboard_overdrive_shutdown(void) {
+	// Preserve the state of the FN key layer
+	system_set_bbram(SYSTEM_BBRAM_IDX_KEYBOARD_OVERDRIVE_STATE, active_layers & (1<<_FN_ANY));
+	active_layers &= ~_FN_ANY;
+}
+DECLARE_HOOK(HOOK_CHIPSET_SHUTDOWN, keyboard_overdrive_shutdown, HOOK_PRIO_DEFAULT);
+
+static void set_layer(uint8_t layer, uint8_t enabled) {
+	// find all bits that don't match layer state
+	active_layers ^= (-(enabled != 0) ^ active_layers) & (1<<layer);
+}
+
+void keyboard_overdrive_startup(void) {
+	uint8_t current_kb = 0;
+
+	if (system_get_bbram(SYSTEM_BBRAM_IDX_KEYBOARD_OVERDRIVE_STATE, &current_kb) == EC_SUCCESS) {
+		// TODO: make sure we use the layer set function when it
+		// exists to get the LEDs right;
+		set_layer(_FN_ANY, (current_kb & (1<<_FN_ANY)) != 0);
+	}
+}
+DECLARE_HOOK(HOOK_CHIPSET_STARTUP, keyboard_overdrive_startup, HOOK_PRIO_DEFAULT);
+
 #define EC_CMD_SET_KEYBOARD_OVERDRIVE 0x3E7F
 
 struct ec_params_set_keyboard_overdrive {
