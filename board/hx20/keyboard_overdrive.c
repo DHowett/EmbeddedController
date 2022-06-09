@@ -6,6 +6,10 @@
 #include "host_command.h"
 #include "keyboard_overdrive.h"
 
+// hx20 specific
+#include "i2c_hid_mediakeys.h"
+#include "keyboard_8042_sharedlib.h"
+
 // 8< LIB >8
 // much easier to have a lookup table (256 bytes) for all keycodes to scancodes.
 // Instead of storing the entire raw set2 scancode, which is somewhat expensive,
@@ -150,24 +154,44 @@ done:
 // 8< LIB >8
 
 __attribute__((weak)) bool process_record_user(uint16_t keycode, uint8_t pressed) {
-	////////////
-	if (keycode == FK_FN) {
-		// The FN key toggles the top row (F1-F12)
-		// which we keep in its own layer.
-		// We use XOR here to turn it off while held if function lock
-		// has turned it on
-		active_layers ^= 1<<_FN_ANY;
-		CPUTS("~LAY 1 ");
-		if (pressed) {
-			active_layers |= 1<<_FN_PRESSED;
-			CPUTS("+LAY 2\n");
-		} else {
-			active_layers &= ~(1<<_FN_PRESSED);
-			CPUTS("-LAY 2\n");
+        switch (keycode) {
+                case FK_FN: { // FN
+			// The FN key toggles the top row (F1-F12)
+			// which we keep in its own layer.
+			// We use XOR here to turn it off while held if function lock
+			// has turned it on
+			active_layers ^= 1<<_FN_ANY;
+			CPUTS("~LAY 1 ");
+			if (pressed) {
+				active_layers |= 1<<_FN_PRESSED;
+				CPUTS("+LAY 2\n");
+			} else {
+				active_layers &= ~(1<<_FN_PRESSED);
+				CPUTS("-LAY 2\n");
+			}
+			return false;
 		}
-		return false;
-	}
-	////////////
+		case FK_PROJ:
+			if (pressed) {
+				simulate_keyboard(SCANCODE_LEFT_WIN, 1);
+				simulate_keyboard(SCANCODE_P, 1);
+			} else {
+				simulate_keyboard(SCANCODE_P, 0);
+				simulate_keyboard(SCANCODE_LEFT_WIN, 0);
+			}
+			return false;
+		case FK_RFKL: // RF Kill - HID report
+			update_hid_key(HID_KEY_AIRPLANE_MODE, pressed);
+			return false;
+		case FK_BRND: // Brightness Down - HID report
+			update_hid_key(HID_KEY_DISPLAY_BRIGHTNESS_DN, pressed);
+			return false;
+		case FK_BRNU: // Brightness Up - HID report
+			update_hid_key(HID_KEY_DISPLAY_BRIGHTNESS_UP, pressed);
+			return false;
+		case FK_BKLT: // Backlight - Handled internally
+			return false;
+        }
 	return true;
 }
 
