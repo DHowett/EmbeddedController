@@ -8,10 +8,6 @@
 enum _opcode {
 	OP_NONE         = 0b0000, // OP 4, MOD 4, KEY 8
 	OP_MOD_TAP      = 0b0001, // OP 4, MOD 4, KEY 8
-	// Layer only when held
-	// Layer lock on
-	// Layer lock off
-	// Layer Tap (LT) => Layer when held, key when tapped (like mod tap)
 	OP_LAYER_TAP    = 0b0010, // OP 4, LAY 4, KEY 8, +press -release
 	OP_LAYER_TOGGLE = 0b0011, // OP 4, LAY 4, ___ 8, toggles on release
 	OP_LAYER_MASK = 0b0100, // OP 4, ___ 4, LAYERS 8, +press -release of whole layer mask
@@ -247,3 +243,20 @@ enum _keycode {
 	                                                                  KN1,      \
 	KM1, KC2, KB3, KD1,            KE1,                KD0, KM0, KL6, KI1, KP2  \
 )
+
+typedef uint8_t layer_state_t;
+void layer_state_set(layer_state_t state);
+void layer_on(uint8_t layer);
+void layer_off(uint8_t layer);
+void layer_invert(uint8_t layer);
+bool layer_state_cmp(layer_state_t state, uint8_t layer);
+bool layer_state_is(uint8_t layer);
+
+/* HOOKS */
+uint8_t layer_state_set_kb(uint8_t state);
+uint8_t layer_state_set_user(uint8_t state);
+
+
+extern const uint16_t keymaps[][KEYBOARD_COLS_MAX][KEYBOARD_ROWS];
+
+__attribute__((weak)) bool process_record_user(uint16_t keycode, uint8_t pressed);
