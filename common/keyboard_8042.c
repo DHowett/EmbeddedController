@@ -1105,6 +1105,50 @@ void simulate_keyboard(uint16_t scancode, int is_pressed)
 		task_wake(TASK_ID_KEYPROTO);
 	}
 }
+
+void simulate_scancodes_set2(uint8_t* scan_code, int32_t len, uint8_t is_pressed) {
+	// Translate a buffer from set2 to set1 (if necessary), send it
+	enum scancode_set_list code_set;
+
+	/*
+	 * Only send the scan code if main chipset is fully awake and
+	 * keystrokes are enabled.
+	 */
+	if (!chipset_in_state(CHIPSET_STATE_ON) || !keystroke_enabled)
+		return;
+
+	code_set = acting_code_set(scancode_set);
+	if (!is_supported_code_set(code_set))
+		return;
+
+	if (code_set == 1) {
+		uint8_t carry = 0, val = 0; // carried bits during set2->1 translation; when we find a 0xF0 we merge it with the next byte
+		int32_t i, j;
+		for(i = 0, j = 0; i < len; ++i) {
+			val = scan_code[i];
+			if (val == 0xF0) {
+				carry = 0x80;
+				continue;
+			} else if(val < 0xE0) {
+				val = scancode_translate_set2_to_1(val);
+			}
+			scan_code[j++] = val | carry;
+			carry = 0;
+		}
+		len = j;
+	}
+	ASSERT(len > 0);
+
+	if (is_pressed)
+		set_typematic_key(scan_code, len);
+	else
+		clear_typematic_key();
+
+	if (keystroke_enabled) {
+		i8042_send_to_host(len, scan_code, CHAN_KBD);
+		task_wake(TASK_ID_KEYPROTO);
+	}
+}
 #endif
 /*****************************************************************************/
 /* Console commands */
