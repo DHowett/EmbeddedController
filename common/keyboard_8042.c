@@ -38,6 +38,8 @@
 #define CPRINTS5(format, args...)
 #endif
 
+#define EC_KBD_HANDLED_ELSEWHERE (EC_ERROR_INTERNAL_FIRST + 1)
+
 static enum {
 	STATE_NORMAL = 0,
 	STATE_SCANCODE,
@@ -344,12 +346,21 @@ static void scancode_bytes(uint16_t make_code, int8_t pressed,
 	}
 }
 
+__attribute__((weak))
+int8_t matrix_callback_overload(int8_t row, int8_t col, int8_t pressed, uint16_t* make_code) {
+	// 0 = not installed
+	// 1 = make_code populated
+	// 2 = drop event
+	return 0;
+}
+
 static enum ec_error_list matrix_callback(int8_t row, int8_t col,
 					  int8_t pressed,
 					  enum scancode_set_list code_set,
 					  uint8_t *scan_code, int32_t *len)
 {
 	uint16_t make_code;
+	int8_t overload;
 
 	ASSERT(scan_code);
 	ASSERT(len);
@@ -357,16 +368,23 @@ static enum ec_error_list matrix_callback(int8_t row, int8_t col,
 	if (row >= KEYBOARD_ROWS || col >= keyboard_cols)
 		return EC_ERROR_INVAL;
 
-	make_code = get_scancode_set2(row, col);
+	overload = matrix_callback_overload(row, col, pressed, &make_code);
+	if (overload == 2) {
+		return EC_KBD_HANDLED_ELSEWHERE;
+	}
+
+	if (overload == 0) {
+		make_code = get_scancode_set2(row, col);
 
 #ifdef CONFIG_KEYBOARD_SCANCODE_CALLBACK
-	{
-		enum ec_error_list r = keyboard_scancode_callback(
-				&make_code, pressed);
-		if (r != EC_SUCCESS)
-			return r;
-	}
+		{
+			enum ec_error_list r = keyboard_scancode_callback(
+					&make_code, pressed);
+			if (r != EC_SUCCESS)
+				return r;
+		}
 #endif
+	}
 
 	code_set = acting_code_set(code_set);
 	if (!is_supported_code_set(code_set)) {
@@ -448,6 +466,13 @@ void keyboard_state_changed(int row, int col, int is_pressed)
 
 	ret = matrix_callback(row, col, is_pressed, scancode_set, scan_code,
 			      &len);
+	if (ret == EC_KBD_HANDLED_ELSEWHERE) {
+		// We no longer need to handle wakeup/typematic state,
+		// the downstream keyboard customization handled it for
+		// us.
+		return;
+	}
+
 	if (ret == EC_SUCCESS) {
 		ASSERT(len > 0);
 		if (keystroke_enabled)
@@ -1086,6 +1111,53 @@ void simulate_keyboard(uint16_t scancode, int is_pressed)
 
 	if (keystroke_enabled) {
 		i8042_send_to_host(len, scan_code, CHAN_KBD);
+		task_wake(TASK_ID_KEYPROTO);
+	}
+}
+
+static uint8_t translation_buffer[8];
+void simulate_scancodes_set2(uint8_t* scan_code, int32_t len, uint8_t is_pressed) {
+	// Translate a buffer from set2 to set1 (if necessary), send it
+	enum scancode_set_list code_set;
+
+	/*
+	 * Only send the scan code if main chipset is fully awake and
+	 * keystrokes are enabled.
+	 */
+	if (!chipset_in_state(CHIPSET_STATE_ON) || !keystroke_enabled)
+		return;
+
+	code_set = acting_code_set(scancode_set);
+	if (!is_supported_code_set(code_set))
+		return;
+
+	len = MIN(8, len);
+	memcpy(translation_buffer, scan_code, len);
+	if (code_set == 1) {
+		uint8_t carry = 0, val = 0; // carried bits during set2->1 translation; when we find a 0xF0 we merge it with the next byte
+		int32_t i, j;
+		for(i = 0, j = 0; i < len; ++i) {
+			val = translation_buffer[i];
+			if (val == 0xF0) {
+				carry = 0x80;
+				continue;
+			} else if(val < 0xE0) {
+				val = scancode_translate_set2_to_1(val);
+			}
+			translation_buffer[j++] = val | carry;
+			carry = 0;
+		}
+		len = j;
+	}
+	ASSERT(len > 0);
+
+	if (is_pressed)
+		set_typematic_key(translation_buffer, len);
+	else
+		clear_typematic_key();
+
+	if (keystroke_enabled) {
+		i8042_send_to_host(len, translation_buffer, CHAN_KBD);
 		task_wake(TASK_ID_KEYPROTO);
 	}
 }
