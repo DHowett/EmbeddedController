@@ -9,6 +9,7 @@
 // hx20 specific
 #include "i2c_hid_mediakeys.h"
 #include "keyboard_8042_sharedlib.h"
+#include "keyboard_backlight.h"
 
 enum _ext_keycode {
 	FK_RFKL = SAFE_AREA, // RF Kill (Airplane Mode)
@@ -25,11 +26,7 @@ enum _layers {
 	_FN_PRESSED,
 };
 
-// FK_FN is a layer mask tap for both the ANY and PRESSED layers
-//#define FK_FN MO(_FN_PRESSED)
 #define FK_FLCK TG(_FN_ANY)
-
-// TODO DH: make sure that FK_FLCK doesn't turn FN_ANY *off* because FK_FN turned it *on*
 
 const uint16_t keymaps[][KEYBOARD_COLS_MAX][KEYBOARD_ROWS] = {
         [_BASE] = LAYOUT_framework_iso(
@@ -64,6 +61,46 @@ const uint16_t keymaps[][KEYBOARD_COLS_MAX][KEYBOARD_ROWS] = {
 #define CPUTS(outstr) cputs(CC_KEYBOARD, outstr)
 #define CPRINTS(format, args...) cprints(CC_KEYBOARD, format, ## args)
 #define CPRINTF(format, args...) cprintf(CC_KEYBOARD, format, ## args)
+
+static uint8_t scancode_pause[] = {0xE1, 0x14, 0x77, 0xE1, 0xF0, 0x14, 0xF0, 0x77};
+static uint8_t scancode_break[] = {0xE0, 0x7E, 0xE0, 0xF0, 0x7E};
+static uint8_t scancode_prtsc_make[]  = {0xE0, 0x12, 0xE0, 0x7C};
+static uint8_t scancode_prtsc_break[] = {0xE0, 0xF0, 0x7C, 0xE0, 0xF0, 0x12};
+
+bool process_record_kb(uint16_t keycode, uint8_t pressed) {
+	switch (keycode) {
+		case KC_PAUS:
+			simulate_scancodes_set2(scancode_pause, sizeof(scancode_pause), 0);
+			return false;
+		case KC_CTBR:
+			simulate_scancodes_set2(scancode_break, sizeof(scancode_break), 0);
+			return false;
+		case KC_PSCR:
+			if (pressed) {
+				simulate_scancodes_set2(scancode_prtsc_make, sizeof(scancode_prtsc_make), 1);
+			} else {
+				simulate_scancodes_set2(scancode_prtsc_break, sizeof(scancode_prtsc_break), 0);
+			}
+			return false;
+	}
+	return true;
+}
+
+/*
+static uint8_t brightness_levels[] = {
+	0,
+	20,
+	50,
+	100
+};
+*/
+
+enum backlight_brightness {
+	KEYBOARD_BL_BRIGHTNESS_OFF = 0,
+	KEYBOARD_BL_BRIGHTNESS_LOW = 20,
+	KEYBOARD_BL_BRIGHTNESS_MED = 50,
+	KEYBOARD_BL_BRIGHTNESS_HIGH = 100,
+};
 
 bool process_record_user(uint16_t keycode, uint8_t pressed) {
         switch (keycode) {
@@ -101,8 +138,36 @@ bool process_record_user(uint16_t keycode, uint8_t pressed) {
 		case FK_BRNU: // Brightness Up - HID report
 			update_hid_key(HID_KEY_DISPLAY_BRIGHTNESS_UP, pressed);
 			return false;
-		case FK_BKLT: // Backlight - Handled internally
+		case FK_BKLT: { // Backlight - Handled internally
+			uint8_t bl_brightness = kblight_get();
+			/*
+			int i = 0;
+			for(; i < sizeof(brightness_levels); ++i) {
+				if (brightness_levels[i] >= bl_brightness)
+					break;
+			}
+			TODO genericize bl level ring
+			*/
+			switch (bl_brightness) {
+			case KEYBOARD_BL_BRIGHTNESS_LOW:
+				bl_brightness = KEYBOARD_BL_BRIGHTNESS_MED;
+				break;
+			case KEYBOARD_BL_BRIGHTNESS_MED:
+				bl_brightness = KEYBOARD_BL_BRIGHTNESS_HIGH;
+				break;
+			case KEYBOARD_BL_BRIGHTNESS_HIGH:
+				hx20_kblight_enable(0);
+				bl_brightness = KEYBOARD_BL_BRIGHTNESS_OFF;
+				break;
+			default:
+			case KEYBOARD_BL_BRIGHTNESS_OFF:
+				hx20_kblight_enable(1);
+				bl_brightness = KEYBOARD_BL_BRIGHTNESS_LOW;
+				break;
+			}
+			kblight_set(bl_brightness);
 			return false;
+		}
         }
 	return true;
 }
