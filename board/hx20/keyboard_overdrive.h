@@ -10,7 +10,6 @@ enum _opcode {
 	OP_MOD_TAP      = 0b0001, // OP 4, MOD 4, KEY 8
 	OP_LAYER_TAP    = 0b0010, // OP 4, LAY 4, KEY 8, +press -release
 	OP_LAYER_TOGGLE = 0b0011, // OP 4, LAY 4, ___ 8, toggles on release
-	OP_LAYER_MASK = 0b0100, // OP 4, ___ 4, LAYERS 8, +press -release of whole layer mask
 };
 
 #define ACT(op, val) (op<<12|val)
@@ -19,7 +18,6 @@ enum _opcode {
 #define ACT_LAYER_TOGGLE(lay) ACT(OP_LAYER_TOGGLE, ((lay)&0xf)<<8)
 #define KEY_GET_OP(kv) (((kv)>>12)&0xf)
 #define KEY_GET_LAYER(kv) (((kv)>>8)&0xf)
-#define KEY_GET_LAYER_MASK(kv) ((kv)&0xff)
 #define KEY_GET_KC(kv) ((kv)&0xff)
 #define KEY_GET_MOD(kv) (((kv)>>8)&0xf)
 #define ACT_MOD(mod, key) ACT(OP_NONE, ((mod)&0xf)<<8|(key))
@@ -164,7 +162,9 @@ enum _keycode {
 #define KC_RO_KANA           0x0051
 #define KC_YEN 0x006a
 
-/* ISO
+/* KSI0-15 = Columns A-P
+ * KSO0-7  = Rows    0-7
+ * ISO
 	,---------------------------------------------------------------------------.
 	| F7    | F3 | F2 | E6 | E3 | K4 | K3 | K2 | P1 | L3 | I4 | I6 | N3 |    B0 |
 	|---------------------------------------------------------------------------|
@@ -256,7 +256,7 @@ bool layer_state_is(uint8_t layer);
 uint8_t layer_state_set_kb(uint8_t state);
 uint8_t layer_state_set_user(uint8_t state);
 
-
 extern const uint16_t keymaps[][KEYBOARD_COLS_MAX][KEYBOARD_ROWS];
 
 __attribute__((weak)) bool process_record_user(uint16_t keycode, uint8_t pressed);
+__attribute__((weak)) bool process_record_kb(uint16_t keycode, uint8_t pressed);

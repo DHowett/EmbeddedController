@@ -34,7 +34,7 @@ static const uint8_t s_keyCodeToCompressedScanCodeMapping[] = {
 	[KC_KP_1] = 0x69,      [KC_KP_2] = 0x72,      [KC_KP_3] = 0x7A,      [KC_KP_4] = 0x6B,      [KC_KP_5] = 0x73,      [KC_KP_6] = 0x74,      [KC_KP_7] = 0x6C,
 	[KC_KP_8] = 0x75,      [KC_KP_9] = 0x7D,      [KC_PAST] = 0x7C,      [KC_PDOT] = 0x71,      [KC_PENT] = _E0(0x5A), [KC_PGDN] = _E0(0x7A), [KC_PGUP] = _E0(0x7D),
 	[KC_PINS] = _E0(0x70), [KC_PMNS] = 0x7B,      [KC_PPLS] = 0x79,      [KC_PSLS] = _E0(0x4A), [KC_MSEL] = _E0(0x50), [KC_MNXT] = _E0(0x4D), [KC_MPRV] = _E0(0x15),
-	[KC_MPLY] = _E0(0x34), [KC_VOLD] = _E0(0x21), [KC_VOLU] = _E0(0x32), [KC_MUTE] = _E0(0x23),
+	[KC_MPLY] = _E0(0x34), [KC_VOLD] = _E0(0x21), [KC_VOLU] = _E0(0x32), [KC_MUTE] = _E0(0x23), [KC_SLCK] = 0x7E,
 	[KC_PSCR] = 0xFC, // E0-7C PrintScr - Might need another special key (E0 12)
 	[KC_CTBR] = 0xFE, // E0-7E Ctrl+Break
 	[KC_PAUS] = 0xFF, // E1-14-77-E1-F0-14-F0-77 Pause
@@ -149,6 +149,7 @@ bool layer_state_is(uint8_t layer) {
 	return layer_state_cmp(active_layers, layer);
 }
 
+__attribute__((weak)) bool process_record_kb(uint16_t keycode, uint8_t pressed) { return true; }
 __attribute__((weak)) bool process_record_user(uint16_t keycode, uint8_t pressed) { return true; }
 
 static int8_t global_enable_keyboard_overload = 0;
@@ -170,6 +171,10 @@ int8_t process_record_overload(int8_t row, int8_t col, int8_t pressed, uint16_t*
 		act.value = keymaps[l][col][row];
 		act.layer = l;
 		set_pressed_layer(row, col, 0);
+	}
+
+	if (!process_record_kb(act.value, pressed)) {
+		return 2;
 	}
 
 	if (!process_record_user(act.value, pressed)) {
