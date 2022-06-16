@@ -1106,6 +1106,7 @@ void simulate_keyboard(uint16_t scancode, int is_pressed)
 	}
 }
 
+static uint8_t translation_buffer[8];
 void simulate_scancodes_set2(uint8_t* scan_code, int32_t len, uint8_t is_pressed) {
 	// Translate a buffer from set2 to set1 (if necessary), send it
 	enum scancode_set_list code_set;
@@ -1121,18 +1122,20 @@ void simulate_scancodes_set2(uint8_t* scan_code, int32_t len, uint8_t is_pressed
 	if (!is_supported_code_set(code_set))
 		return;
 
+	len = MIN(8, len);
+	memcpy(translation_buffer, scan_code, len);
 	if (code_set == 1) {
 		uint8_t carry = 0, val = 0; // carried bits during set2->1 translation; when we find a 0xF0 we merge it with the next byte
 		int32_t i, j;
 		for(i = 0, j = 0; i < len; ++i) {
-			val = scan_code[i];
+			val = translation_buffer[i];
 			if (val == 0xF0) {
 				carry = 0x80;
 				continue;
 			} else if(val < 0xE0) {
 				val = scancode_translate_set2_to_1(val);
 			}
-			scan_code[j++] = val | carry;
+			translation_buffer[j++] = val | carry;
 			carry = 0;
 		}
 		len = j;
@@ -1140,12 +1143,12 @@ void simulate_scancodes_set2(uint8_t* scan_code, int32_t len, uint8_t is_pressed
 	ASSERT(len > 0);
 
 	if (is_pressed)
-		set_typematic_key(scan_code, len);
+		set_typematic_key(translation_buffer, len);
 	else
 		clear_typematic_key();
 
 	if (keystroke_enabled) {
-		i8042_send_to_host(len, scan_code, CHAN_KBD);
+		i8042_send_to_host(len, translation_buffer, CHAN_KBD);
 		task_wake(TASK_ID_KEYPROTO);
 	}
 }
