@@ -2,7 +2,11 @@
 #include "stdbool.h"
 #include "system.h"
 #include "host_command.h" // prune
+#include "queue.h"
+#include "task.h"
 #include "keyboard_overdrive.h"
+
+#include "keyboard_8042_sharedlib.h"
 
 #define CPUTS(outstr) cputs(CC_KEYBOARD, outstr)
 #define CPRINTS(format, args...) cprints(CC_KEYBOARD, format, ## args)
@@ -40,6 +44,9 @@ static const uint8_t s_keyCodeToCompressedScanCodeMapping[] = {
 	[KC_PAUS] = 0xFF, // E1-14-77-E1-F0-14-F0-77 Pause
 };
 #undef _E0
+
+static struct mutex ko_queue_mutex;
+static struct queue ko_queue = QUEUE_NULL(16, struct ko_queued_event);
 
 static layer_state_t base_layers   = 0b00000001;
 static layer_state_t active_layers = 0b00000000;
@@ -230,6 +237,50 @@ ternary_t matrix_callback_overload(int8_t row, int8_t col, int8_t pressed, uint1
 		set_pressed_layer(row, col, 0);
 	}
 
+	/* Early: if keycode is a mod tap, queue it for later */
+	if ((KEY_GET_OP(keycode) == OP_MOD_TAP || KEY_GET_OP(keycode) == OP_LAYER_TAP)
+			&& KEY_GET_KC(keycode) != KC_NO) {
+		if (pressed) {
+			// enqueue record for future processing;
+			struct ko_queued_event ev = {};
+			ev.ts = get_time();
+			ev.ts.val += KO_TAP_TERM * MSEC; // fire time
+			ev.cancelled = false; // live
+			ev.record = record; // copy
+			ev.keycode = keycode;
+			queue_add_unit(&ko_queue, &ev);
+			task_wake(TASK_ID_KEYOVER);
+		} else {
+			struct queue_iterator it;
+			struct ko_queued_event* found = NULL;
+
+			mutex_lock(&ko_queue_mutex);
+			queue_begin(&ko_queue, &it);
+			while(it.ptr != NULL) {
+				struct ko_queued_event* ev = (struct ko_queued_event*)it.ptr;
+				if (ev->record.event.key.row == row && ev->record.event.key.col == col) {
+					ev->cancelled = true;
+					found = ev;
+					break;
+				}
+				queue_next(&ko_queue, &it);
+			}
+			mutex_unlock(&ko_queue_mutex);
+
+			// if it was queued, cancel it and process a tap fire release
+			if (found) {
+				// cancel it
+				record.event.pressed = 1;
+				record.tap.count = 1;
+				process_record(keycode, &record);
+			}
+			// if we can't find it, it already fired. send a release for the modifier or layer
+			// tap will be set to 1 if we found a press-fire already scheduled and 0 if we did not
+			record.event.pressed = 0;
+			process_record(keycode, &record);
+		}
+		return T_DROP_EVENT;
+	}
 
 	if (!process_record(keycode, &record)) {
 		return T_DROP_EVENT;
@@ -252,3 +303,35 @@ static enum ec_status keyboard_overdrive(struct host_cmd_handler_args *args)
 	return EC_RES_SUCCESS;
 }
 DECLARE_HOST_COMMAND(EC_CMD_SET_KEYBOARD_OVERDRIVE, keyboard_overdrive, EC_VER_MASK(0));
+
+void keyboard_overdrive_task(void* u) {
+	int wait = -1;
+	while(1) {
+		struct ko_queued_event e;
+
+		task_wait_event(wait); // well, have a nap...
+
+		if (queue_is_empty(&ko_queue)) {
+			// if queue is empty, break and go back to sleep
+			wait = -1;
+			continue;
+		}
+
+		mutex_lock(&ko_queue_mutex);
+		queue_remove_unit(&ko_queue, &e);
+		if (e.cancelled) {
+			// no-op, it's been removed already
+			mutex_unlock(&ko_queue_mutex);
+		} else if (timestamp_expired(e.ts, NULL)) {
+			mutex_unlock(&ko_queue_mutex);
+			// ...THEN FIRE THE EVENTS
+			process_record(e.keycode, &e.record);
+		} else {
+			// hold mtx until we've re-added it
+			queue_add_unit(&ko_queue, &e);
+			mutex_unlock(&ko_queue_mutex);
+		}
+		// DH: consider, you don't want to wait 50ms between queue events
+		wait = KO_TAP_HOLD_MIN_DELAY_MS * MSEC;
+	}
+}

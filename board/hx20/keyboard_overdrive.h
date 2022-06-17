@@ -12,6 +12,14 @@ enum _opcode {
 	OP_LAYER_TOGGLE = 0b0011, // OP 4, LAY 4, ___ 8, toggles on release
 };
 
+enum _modifier {
+	MOD_LCTL = 0b0001,
+	MOD_LALT = 0b0010,
+	MOD_LSFT = 0b0100,
+	MOD_LGUI = 0b1000,
+	MOD_LWIN = MOD_LGUI,
+};
+
 #define ACT(op, val) (op<<12|val)
 #define ACT_MOD_TAP(mod, key) ACT(OP_MOD_TAP, ((mod)&0xf)<<8|(key))
 #define ACT_LAYER_TAP(lay, key) ACT(OP_LAYER_TAP, ((lay)&0xf)<<8|(key))
@@ -88,7 +96,8 @@ enum _keycode {
 	KC_LCTL,
 	KC_LEFT,
 	KC_LSFT,
-	KC_LWIN,
+	KC_LGUI,
+	KC_RGUI,
 	KC_MENU,
 	KC_MINS,
 	KC_NLCK,
@@ -152,6 +161,9 @@ enum _keycode {
 	KC_SLCK,
 
 	SAFE_AREA,
+
+	KC_LWIN = KC_LGUI,
+	KC_RWIN = KC_RGUI,
 };
 
 #define _______ KC_TRANSPARENT
@@ -282,3 +294,12 @@ typedef struct key_record {
 
 __attribute__((weak)) bool process_record_user(uint16_t keycode, keyrecord_t* record);
 __attribute__((weak)) bool process_record_kb(uint16_t keycode, keyrecord_t* record);
+
+#define KO_TAP_HOLD_MIN_DELAY_MS 50 /* milliseconds */
+#define KO_TAP_TERM 200 /* ms */
+struct ko_queued_event {
+	timestamp_t ts;
+	bool cancelled;
+	uint16_t keycode;
+	struct key_record record;
+};
