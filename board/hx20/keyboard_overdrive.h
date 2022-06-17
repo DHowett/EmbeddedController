@@ -295,7 +295,6 @@ typedef struct key_record {
 __attribute__((weak)) bool process_record_user(uint16_t keycode, keyrecord_t* record);
 __attribute__((weak)) bool process_record_kb(uint16_t keycode, keyrecord_t* record);
 
-#define KO_TAP_HOLD_MIN_DELAY_MS 50 /* milliseconds */
 #define KO_TAP_TERM 200 /* ms */
 struct ko_queued_event {
 	timestamp_t ts;

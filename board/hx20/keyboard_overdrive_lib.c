@@ -153,15 +153,11 @@ __attribute__((weak)) bool process_record_user(uint16_t keycode, keyrecord_t* re
 
 bool process_record(uint16_t keycode, struct key_record* record) {
 
-	CPRINTF("KO: %d,%d %s TAP=%d\n", record->event.key.row, record->event.key.col, record->event.pressed?"DOWN":"UP", record->tap.count);
-
 	if (!process_record_kb(keycode, record)) {
-		CPUTS("KO cancelled by kb\n");
 		return false;
 	}
 
 	if (!process_record_user(keycode, record)) {
-		CPUTS("KO cancelled by user\n");
 		return false;
 	}
 
@@ -171,7 +167,6 @@ bool process_record(uint16_t keycode, struct key_record* record) {
 			return false;
 		}
 		case OP_MOD_TAP: {
-			CPRINTF(">> MOD_TAP: PRESS %d TAP %d\n", record->event.pressed, record->tap.count);
 			if (record->tap.count == 0) { // if held
 				simulate_mods(KEY_GET_MOD(keycode), record);
 			} else { // if simply pressed
@@ -182,11 +177,6 @@ bool process_record(uint16_t keycode, struct key_record* record) {
 			if (record->tap.count == 0) { // if held
 				uint8_t layer = KEY_GET_LAYER(keycode);
 				layer_state_set(active_layers ^ ((-(record->event.pressed != 0) ^ active_layers) & (1<<layer)));
-				if (record->event.pressed) {
-					CPRINTF("+LAY %d\n", layer);
-				} else {
-					CPRINTF("-LAY %d\n", layer);
-				}
 			} else {
 				send_kc_sc(keycode, record);
 			}
@@ -195,7 +185,6 @@ bool process_record(uint16_t keycode, struct key_record* record) {
 		case OP_LAYER_TOGGLE: {
 			uint8_t layer = KEY_GET_LAYER(keycode);
 			if (record->event.pressed) {
-				CPRINTF("~LAY %d\n", layer);
 				layer_invert(layer);
 				//active_layers ^= 1<<layer;
 			} // toggle actions take effect on press, not release
@@ -307,7 +296,9 @@ DECLARE_HOST_COMMAND(EC_CMD_SET_KEYBOARD_OVERDRIVE, keyboard_overdrive, EC_VER_M
 void keyboard_overdrive_task(void* u) {
 	int wait = -1;
 	while(1) {
-		struct ko_queued_event e;
+		struct queue_iterator it;
+		timestamp_t t;
+		int i = 0;
 
 		task_wait_event(wait); // well, have a nap...
 
@@ -318,20 +309,31 @@ void keyboard_overdrive_task(void* u) {
 		}
 
 		mutex_lock(&ko_queue_mutex);
-		queue_remove_unit(&ko_queue, &e);
-		if (e.cancelled) {
-			// no-op, it's been removed already
-			mutex_unlock(&ko_queue_mutex);
-		} else if (timestamp_expired(e.ts, NULL)) {
-			mutex_unlock(&ko_queue_mutex);
-			// ...THEN FIRE THE EVENTS
-			process_record(e.keycode, &e.record);
-		} else {
-			// hold mtx until we've re-added it
-			queue_add_unit(&ko_queue, &e);
-			mutex_unlock(&ko_queue_mutex);
+		t = get_time();
+		queue_begin(&ko_queue, &it);
+		while(it.ptr) { // we will always bail early or run out of queue
+			struct ko_queued_event* e = (struct ko_queued_event*)it.ptr;
+			// look at e: if it has been cancelled, we can remove it later
+			if (e->cancelled) {
+				++i; // remove this entry
+			} else if (timestamp_expired(e->ts, &t)) {
+				struct ko_queued_event copy = *e;
+				++i; // remove this entry
+				mutex_unlock(&ko_queue_mutex);
+				// we don't want to call under lock
+				// RISK (TODO): processing a record could modify the queue...
+				process_record(copy.keycode, &copy.record);
+				mutex_lock(&ko_queue_mutex);
+			} else {
+				int remaining = e->ts.val - t.val;
+				// The first event is not ready yet,
+				// so we should wait for it to be ready.
+				wait = CLAMP(remaining, 1, KO_TAP_TERM * MSEC);
+				break;
+			}
+			queue_next(&ko_queue, &it);
 		}
-		// DH: consider, you don't want to wait 50ms between queue events
-		wait = KO_TAP_HOLD_MIN_DELAY_MS * MSEC;
+		queue_advance_head(&ko_queue, i); // delete the cancelled and processed events
+		mutex_unlock(&ko_queue_mutex);
 	}
 }
