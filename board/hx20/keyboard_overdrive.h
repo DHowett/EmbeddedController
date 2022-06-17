@@ -256,7 +256,29 @@ bool layer_state_is(uint8_t layer);
 uint8_t layer_state_set_kb(uint8_t state);
 uint8_t layer_state_set_user(uint8_t state);
 
-extern const uint16_t keymaps[][KEYBOARD_COLS_MAX][KEYBOARD_ROWS];
+extern uint16_t keymaps[][KEYBOARD_COLS_MAX][KEYBOARD_ROWS];
 
-__attribute__((weak)) bool process_record_user(uint16_t keycode, uint8_t pressed);
-__attribute__((weak)) bool process_record_kb(uint16_t keycode, uint8_t pressed);
+struct key_pos {
+	uint8_t row;
+	uint8_t col;
+};
+
+struct key_event {
+	struct key_pos key;
+	bool pressed;
+};
+
+struct key_tap {
+	uint8_t count;
+};
+
+typedef struct key_record {
+	struct key_event event;
+	struct key_tap tap;
+} keyrecord_t; // QMK compatibility name
+
+// tap.count is 1 when the tap event fired
+// tap.count is 0 when the hold event fired
+
+__attribute__((weak)) bool process_record_user(uint16_t keycode, keyrecord_t* record);
+__attribute__((weak)) bool process_record_kb(uint16_t keycode, keyrecord_t* record);

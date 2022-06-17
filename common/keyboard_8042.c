@@ -345,7 +345,7 @@ static void scancode_bytes(uint16_t make_code, int8_t pressed,
 }
 
 __attribute__((weak))
-int8_t process_record_overload(int8_t row, int8_t col, int8_t pressed, uint16_t* make_code) {
+int8_t matrix_callback_overload(int8_t row, int8_t col, int8_t pressed, uint16_t* make_code) {
 	// 0 = not installed
 	// 1 = make_code populated
 	// 2 = drop event
@@ -366,7 +366,7 @@ static enum ec_error_list matrix_callback(int8_t row, int8_t col,
 	if (row >= KEYBOARD_ROWS || col >= keyboard_cols)
 		return EC_ERROR_INVAL;
 
-	overload = process_record_overload(row, col, pressed, &make_code);
+	overload = matrix_callback_overload(row, col, pressed, &make_code);
 	if (overload == 2) {
 		return EC_ERROR_UNIMPLEMENTED;
 	}

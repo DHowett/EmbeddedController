@@ -67,58 +67,25 @@ static uint8_t get_pressed_layer(uint8_t row, uint8_t col) {
 	return layer;
 }
 
-struct action {
-	uint16_t value;
-	uint8_t layer;
-};
-
-static struct action get_key_action(uint8_t row, uint8_t col) {
-	struct action act = {0};
+static uint16_t get_keycode_at_pos(uint8_t row, uint8_t col, uint8_t* layer) {
+	uint16_t kc = KC_NO;
 	uint8_t layers = base_layers | active_layers;
+
+	*layer = 0;
 	for(int i = NUM_LAYERS_MAX - 1; i >= 0; --i) {
 		if (layers & (1<<i)) {
-			act.value = keymaps[i][col][row];
-			act.layer = i;
-			if (act.value == KC_TRANSPARENT) {
+			kc = keymaps[i][col][row];
+			*layer = i;
+			if (kc == KC_TRANSPARENT) {
 				continue; // peer through this layer
 			}
 			goto done;
 		}
 	}
-	// We didn't hit it somehow?
-	act.value = KC_NO;
-	act.layer = 0;
+	kc = KC_NO;
 done:
-	return act;
+	return kc;
 }
-// 8< LIB >8
-
-#if 0
-#define _RING_BUF_RD(name) name##_buf_rd
-#define _RING_BUF_WR(name) name##_buf_wr
-#define RING_BUFFER(type, name, size) \
-	static type name##_buf[size]; \
-	static uint8_t name##_buf_wr, name##buf_rd; \
-	static bool name##_push(const type* v) { \
-		if (((_RING_BUF_WR(name) + 1) % size) == _RING_BUF_RD(name)) { \
-			return false; \
-		} \
-		memcpy(&name##_buf[_RING_BUF_WR(name)], v, sizeof(*v)); \
-		_RING_BUF_WR(name) = (_RING_BUF_WR(name) + 1) % size; \
-		return true; \
-	} \
-	static bool name##_pop(type* v) { \
-		if (_RING_BUF_RD(name) == _RING_BUF_WR(name)) { \
-			return false; \
-		} \
-		memcpy(v, &name##_buf[_RING_BUF_RD(name)], sizeof(*v)); \
-		_RING_BUF_RD(name) = (_RING_BUF_RD(name) + 1) % size; \
-		return true; \
-	}
-
-void process_deferred_key_events(void) {
-}
-#endif
 
 __attribute__((weak)) uint8_t layer_state_set_kb(uint8_t state) { return state; }
 __attribute__((weak)) uint8_t layer_state_set_user(uint8_t state) { return state; }
@@ -149,74 +116,126 @@ bool layer_state_is(uint8_t layer) {
 	return layer_state_cmp(active_layers, layer);
 }
 
-__attribute__((weak)) bool process_record_kb(uint16_t keycode, uint8_t pressed) { return true; }
-__attribute__((weak)) bool process_record_user(uint16_t keycode, uint8_t pressed) { return true; }
+static void send_kc_sc(uint16_t keycode, struct key_record* record) {
+	uint16_t scancode = s_keyCodeToCompressedScanCodeMapping[KEY_GET_KC(keycode)];
+	scancode ^= (-((scancode & 0x80) != 0) & 0xE080); // simultaneously sets high 0xE000 and clears 0x80 iff scancode contains 0x80
+	if (scancode == 0xe003) scancode = 0x83; // special-case the only value that breaks our optimization
+	simulate_keyboard(scancode, record->event.pressed);
+}
 
-static int8_t global_enable_keyboard_overload = 0;
-// return 0 = NOT INSTALLED 1 = make_code normal SC 2 = STOP EVENT
-int8_t process_record_overload(int8_t row, int8_t col, int8_t pressed, uint16_t* make_code) {
-	struct action act;
-	if (!global_enable_keyboard_overload) {
-		return 0;
-	}
+static uint16_t mod_scancodes[] = {
+	[0 /*MOD_LCTL*/] = 0x14,
+	[1 /*MOD_LALT*/] = 0x11, 
+	[2 /*MOD_LSFT*/] = 0x13,
+	[3 /*MOD_LGUI*/] = 0xE01F,
+	//[MOD_RCTL] = 0xE014,
+	//[MOD_RALT] = 0xE011,
+	//[MOD_RGUI] = 0xE027,
+};
 
-	CPRINTF("--- KEYSCAN ROW %d COL %d %s LMASK %x ---\n", row, col, pressed?"DOWN":"UP", active_layers|base_layers);
-	if (pressed) {
-		act = get_key_action(row, col);
-		CPRINTF("ACT=%4.04x LAY=%d\n", act.value, act.layer);
-		set_pressed_layer(row, col, act.layer);
-	} else {
-		uint8_t l = get_pressed_layer(row, col);
-		CPRINTF("ACT=%4.04x LAY=%d [FORCED]\n", keymaps[l][col][row], l);
-		act.value = keymaps[l][col][row];
-		act.layer = l;
-		set_pressed_layer(row, col, 0);
-	}
-
-	if (!process_record_kb(act.value, pressed)) {
-		return 2;
-	}
-
-	if (!process_record_user(act.value, pressed)) {
-		return 2;
-	}
-
-	switch (KEY_GET_OP(act.value)) {
-		case OP_NONE: {
-			uint16_t scancode = s_keyCodeToCompressedScanCodeMapping[KEY_GET_KC(act.value)];
-			scancode ^= (-((scancode & 0x80) != 0) & 0xE080); // simultaneously sets high 0xE000 and clears 0x80 iff scancode contains 0x80
-			if (scancode == 0xe003) scancode = 0x83; // special-case the only value that breaks our optimization
-			*make_code = scancode;
-			return 1; // SCAN IT OUT LIKE NORMAL
-			break;
+static void simulate_mods(uint8_t mods, struct key_record* record) {
+	for(int i = 0; i < sizeof(mod_scancodes); ++i) {
+		if (mods & (1<<i)) {
+			simulate_keyboard(mod_scancodes[i], record->event.pressed);
 		}
-		case OP_MOD_TAP:
-			if (pressed)
-				CPUTS("mod tap\n");
-			break;
-		case OP_LAYER_TAP: {
-			uint8_t layer = KEY_GET_LAYER(act.value);
-			layer_state_set(active_layers ^ ((-(pressed != 0) ^ active_layers) & (1<<layer)));
-			if (pressed) {
-				CPRINTF("+LAY %d\n", layer);
-				//active_layers |= 1<<layer;
-			} else {
-				CPRINTF("-LAY %d\n", layer);
-				//active_layers &= ~(1<<layer);
+	}
+}
+
+__attribute__((weak)) bool process_record_kb(uint16_t keycode, keyrecord_t* record) { return true; }
+__attribute__((weak)) bool process_record_user(uint16_t keycode, keyrecord_t* record) { return true; }
+
+bool process_record(uint16_t keycode, struct key_record* record) {
+
+	CPRINTF("KO: %d,%d %s TAP=%d\n", record->event.key.row, record->event.key.col, record->event.pressed?"DOWN":"UP", record->tap.count);
+
+	if (!process_record_kb(keycode, record)) {
+		CPUTS("KO cancelled by kb\n");
+		return false;
+	}
+
+	if (!process_record_user(keycode, record)) {
+		CPUTS("KO cancelled by user\n");
+		return false;
+	}
+
+	switch (KEY_GET_OP(keycode)) {
+		case OP_NONE: {
+			send_kc_sc(keycode, record);
+			return false;
+		}
+		case OP_MOD_TAP: {
+			CPRINTF(">> MOD_TAP: PRESS %d TAP %d\n", record->event.pressed, record->tap.count);
+			if (record->tap.count == 0) { // if held
+				simulate_mods(KEY_GET_MOD(keycode), record);
+			} else { // if simply pressed
+				send_kc_sc(keycode, record);
 			}
-			break;
+			return false;
+		} case OP_LAYER_TAP: {
+			if (record->tap.count == 0) { // if held
+				uint8_t layer = KEY_GET_LAYER(keycode);
+				layer_state_set(active_layers ^ ((-(record->event.pressed != 0) ^ active_layers) & (1<<layer)));
+				if (record->event.pressed) {
+					CPRINTF("+LAY %d\n", layer);
+				} else {
+					CPRINTF("-LAY %d\n", layer);
+				}
+			} else {
+				send_kc_sc(keycode, record);
+			}
+			return false;
 		}
 		case OP_LAYER_TOGGLE: {
-			uint8_t layer = KEY_GET_LAYER(act.value);
-			if (pressed) {
+			uint8_t layer = KEY_GET_LAYER(keycode);
+			if (record->event.pressed) {
 				CPRINTF("~LAY %d\n", layer);
 				layer_invert(layer);
 				//active_layers ^= 1<<layer;
 			} // toggle actions take effect on press, not release
-			break;
+			return false;
 		}
 	}
-	return 2;
+	return false;
+}
+
+static struct key_record record;
+static int8_t global_enable_keyboard_overload = 0;
+
+typedef uint8_t ternary_t;
+enum _ternary_t {
+	T_NOT_INSTALLED = 0,
+	T_SEND_EVENT = 1,
+	T_DROP_EVENT = 2
+};
+ternary_t matrix_callback_overload(int8_t row, int8_t col, int8_t pressed, uint16_t* make_code) {
+	uint16_t keycode;
+
+	// return 0 = NOT INSTALLED 1 = make_code normal SC 2 = STOP EVENT
+	if (!global_enable_keyboard_overload) {
+		return T_NOT_INSTALLED;
+	}
+
+	memset(&record, 0, sizeof(record));
+	record.event.key.row = row;
+	record.event.key.col = col;
+	record.event.pressed = pressed != 0;
+
+	if (pressed) {
+		uint8_t layer;
+		keycode = get_keycode_at_pos(row, col, &layer);
+		set_pressed_layer(row, col, layer);
+	} else {
+		uint8_t layer = get_pressed_layer(row, col);
+		keycode = keymaps[layer][col][row];
+		set_pressed_layer(row, col, 0);
+	}
+
+
+	if (!process_record(keycode, &record)) {
+		return T_DROP_EVENT;
+	}
+
+	return T_DROP_EVENT;
 }
 
 //////////////////////////////////

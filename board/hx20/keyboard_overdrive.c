@@ -67,16 +67,18 @@ static uint8_t scancode_break[] = {0xE0, 0x7E, 0xE0, 0xF0, 0x7E};
 static uint8_t scancode_prtsc_make[]  = {0xE0, 0x12, 0xE0, 0x7C};
 static uint8_t scancode_prtsc_break[] = {0xE0, 0xF0, 0x7C, 0xE0, 0xF0, 0x12};
 
-bool process_record_kb(uint16_t keycode, uint8_t pressed) {
+bool process_record_kb(uint16_t keycode, keyrecord_t* record) {
 	switch (keycode) {
 		case KC_PAUS:
-			simulate_scancodes_set2(scancode_pause, sizeof(scancode_pause), 0);
+			if (record->event.pressed)
+				simulate_scancodes_set2(scancode_pause, sizeof(scancode_pause), 0);
 			return false;
 		case KC_CTBR:
-			simulate_scancodes_set2(scancode_break, sizeof(scancode_break), 0);
+			if (record->event.pressed)
+				simulate_scancodes_set2(scancode_break, sizeof(scancode_break), 0);
 			return false;
 		case KC_PSCR:
-			if (pressed) {
+			if (record->event.pressed) {
 				simulate_scancodes_set2(scancode_prtsc_make, sizeof(scancode_prtsc_make), 1);
 			} else {
 				simulate_scancodes_set2(scancode_prtsc_break, sizeof(scancode_prtsc_break), 0);
@@ -102,7 +104,7 @@ enum backlight_brightness {
 	KEYBOARD_BL_BRIGHTNESS_HIGH = 100,
 };
 
-bool process_record_user(uint16_t keycode, uint8_t pressed) {
+bool process_record_user(uint16_t keycode, keyrecord_t* record) {
         switch (keycode) {
                 case FK_FN: { // FN
 			// The FN key toggles the top row (F1-F12)
@@ -111,7 +113,7 @@ bool process_record_user(uint16_t keycode, uint8_t pressed) {
 			// has turned it on
 			layer_invert(_FN_ANY);
 			CPUTS("~LAY 1 ");
-			if (pressed) {
+			if (record->event.pressed) {
 				layer_on(_FN_PRESSED);
 				CPUTS("+LAY 2\n");
 			} else {
@@ -121,7 +123,7 @@ bool process_record_user(uint16_t keycode, uint8_t pressed) {
 			return false;
 		}
 		case FK_PROJ:
-			if (pressed) {
+			if (record->event.pressed) {
 				simulate_keyboard(SCANCODE_LEFT_WIN, 1);
 				simulate_keyboard(SCANCODE_P, 1);
 			} else {
@@ -130,42 +132,44 @@ bool process_record_user(uint16_t keycode, uint8_t pressed) {
 			}
 			return false;
 		case FK_RFKL: // RF Kill - HID report
-			update_hid_key(HID_KEY_AIRPLANE_MODE, pressed);
+			update_hid_key(HID_KEY_AIRPLANE_MODE, record->event.pressed);
 			return false;
 		case FK_BRND: // Brightness Down - HID report
-			update_hid_key(HID_KEY_DISPLAY_BRIGHTNESS_DN, pressed);
+			update_hid_key(HID_KEY_DISPLAY_BRIGHTNESS_DN, record->event.pressed);
 			return false;
 		case FK_BRNU: // Brightness Up - HID report
-			update_hid_key(HID_KEY_DISPLAY_BRIGHTNESS_UP, pressed);
+			update_hid_key(HID_KEY_DISPLAY_BRIGHTNESS_UP, record->event.pressed);
 			return false;
 		case FK_BKLT: { // Backlight - Handled internally
-			uint8_t bl_brightness = kblight_get();
-			/*
-			int i = 0;
-			for(; i < sizeof(brightness_levels); ++i) {
-				if (brightness_levels[i] >= bl_brightness)
+			if (record->event.pressed) {
+				uint8_t bl_brightness = kblight_get();
+				/*
+				int i = 0;
+				for(; i < sizeof(brightness_levels); ++i) {
+					if (brightness_levels[i] >= bl_brightness)
+						break;
+				}
+				TODO genericize bl level ring
+				*/
+				switch (bl_brightness) {
+				case KEYBOARD_BL_BRIGHTNESS_LOW:
+					bl_brightness = KEYBOARD_BL_BRIGHTNESS_MED;
 					break;
+				case KEYBOARD_BL_BRIGHTNESS_MED:
+					bl_brightness = KEYBOARD_BL_BRIGHTNESS_HIGH;
+					break;
+				case KEYBOARD_BL_BRIGHTNESS_HIGH:
+					hx20_kblight_enable(0);
+					bl_brightness = KEYBOARD_BL_BRIGHTNESS_OFF;
+					break;
+				default:
+				case KEYBOARD_BL_BRIGHTNESS_OFF:
+					hx20_kblight_enable(1);
+					bl_brightness = KEYBOARD_BL_BRIGHTNESS_LOW;
+					break;
+				}
+				kblight_set(bl_brightness);
 			}
-			TODO genericize bl level ring
-			*/
-			switch (bl_brightness) {
-			case KEYBOARD_BL_BRIGHTNESS_LOW:
-				bl_brightness = KEYBOARD_BL_BRIGHTNESS_MED;
-				break;
-			case KEYBOARD_BL_BRIGHTNESS_MED:
-				bl_brightness = KEYBOARD_BL_BRIGHTNESS_HIGH;
-				break;
-			case KEYBOARD_BL_BRIGHTNESS_HIGH:
-				hx20_kblight_enable(0);
-				bl_brightness = KEYBOARD_BL_BRIGHTNESS_OFF;
-				break;
-			default:
-			case KEYBOARD_BL_BRIGHTNESS_OFF:
-				hx20_kblight_enable(1);
-				bl_brightness = KEYBOARD_BL_BRIGHTNESS_LOW;
-				break;
-			}
-			kblight_set(bl_brightness);
 			return false;
 		}
         }
