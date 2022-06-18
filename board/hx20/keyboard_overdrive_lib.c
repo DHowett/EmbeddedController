@@ -45,6 +45,8 @@ static const uint8_t s_keyCodeToCompressedScanCodeMapping[] = {
 };
 #undef _E0
 
+#define IS_TAP_HOLD_ACTION(keycode) ((KEY_GET_OP(keycode) == OP_MOD_TAP || KEY_GET_OP(keycode) == OP_LAYER_TAP) && KEY_GET_KC(keycode) != KC_NO)
+
 static struct mutex ko_queue_mutex;
 static struct queue ko_queue = QUEUE_NULL(16, struct ko_queued_event);
 
@@ -194,6 +196,48 @@ bool process_record(uint16_t keycode, struct key_record* record) {
 	return false;
 }
 
+static void process_tap_hold_action(uint16_t keycode, struct key_record* record) {
+	if (record->event.pressed) {
+		// enqueue record for future processing;
+		struct ko_queued_event ev = {};
+		ev.ts = get_time();
+		ev.ts.val += KO_TAP_TERM * MSEC; // fire time
+		ev.cancelled = false; // live
+		ev.record = *record; // copy
+		ev.keycode = keycode;
+		queue_add_unit(&ko_queue, &ev);
+		task_wake(TASK_ID_KEYOVER);
+	} else {
+		struct queue_iterator it;
+		struct ko_queued_event* found = NULL;
+
+		mutex_lock(&ko_queue_mutex);
+		queue_begin(&ko_queue, &it);
+		while(it.ptr != NULL) {
+			struct ko_queued_event* ev = (struct ko_queued_event*)it.ptr;
+			if (ev->record.event.key.row == record->event.key.row && ev->record.event.key.col == record->event.key.col) {
+				ev->cancelled = true;
+				found = ev;
+				break;
+			}
+			queue_next(&ko_queue, &it);
+		}
+		mutex_unlock(&ko_queue_mutex);
+
+		// if it was queued, cancel it and process a tap fire release
+		if (found) {
+			// cancel it
+			record->event.pressed = 1;
+			record->tap.count = 1;
+			process_record(keycode, record);
+		}
+		// if we can't find it, it already fired. send a release for the modifier or layer
+		// tap will be set to 1 if we found a press-fire already scheduled and 0 if we did not
+		record->event.pressed = 0;
+		process_record(keycode, record);
+	}
+}
+
 static struct key_record record;
 static int8_t global_enable_keyboard_overload = 0;
 
@@ -206,7 +250,6 @@ enum _ternary_t {
 ternary_t matrix_callback_overload(int8_t row, int8_t col, int8_t pressed, uint16_t* make_code) {
 	uint16_t keycode;
 
-	// return 0 = NOT INSTALLED 1 = make_code normal SC 2 = STOP EVENT
 	if (!global_enable_keyboard_overload) {
 		return T_NOT_INSTALLED;
 	}
@@ -227,47 +270,8 @@ ternary_t matrix_callback_overload(int8_t row, int8_t col, int8_t pressed, uint1
 	}
 
 	/* Early: if keycode is a mod tap, queue it for later */
-	if ((KEY_GET_OP(keycode) == OP_MOD_TAP || KEY_GET_OP(keycode) == OP_LAYER_TAP)
-			&& KEY_GET_KC(keycode) != KC_NO) {
-		if (pressed) {
-			// enqueue record for future processing;
-			struct ko_queued_event ev = {};
-			ev.ts = get_time();
-			ev.ts.val += KO_TAP_TERM * MSEC; // fire time
-			ev.cancelled = false; // live
-			ev.record = record; // copy
-			ev.keycode = keycode;
-			queue_add_unit(&ko_queue, &ev);
-			task_wake(TASK_ID_KEYOVER);
-		} else {
-			struct queue_iterator it;
-			struct ko_queued_event* found = NULL;
-
-			mutex_lock(&ko_queue_mutex);
-			queue_begin(&ko_queue, &it);
-			while(it.ptr != NULL) {
-				struct ko_queued_event* ev = (struct ko_queued_event*)it.ptr;
-				if (ev->record.event.key.row == row && ev->record.event.key.col == col) {
-					ev->cancelled = true;
-					found = ev;
-					break;
-				}
-				queue_next(&ko_queue, &it);
-			}
-			mutex_unlock(&ko_queue_mutex);
-
-			// if it was queued, cancel it and process a tap fire release
-			if (found) {
-				// cancel it
-				record.event.pressed = 1;
-				record.tap.count = 1;
-				process_record(keycode, &record);
-			}
-			// if we can't find it, it already fired. send a release for the modifier or layer
-			// tap will be set to 1 if we found a press-fire already scheduled and 0 if we did not
-			record.event.pressed = 0;
-			process_record(keycode, &record);
-		}
+	if (IS_TAP_HOLD_ACTION(keycode)) {
+		process_tap_hold_action(keycode, &record);
 		return T_DROP_EVENT;
 	}
 
