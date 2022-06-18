@@ -268,7 +268,7 @@ bool layer_state_is(uint8_t layer);
 uint8_t layer_state_set_kb(uint8_t state);
 uint8_t layer_state_set_user(uint8_t state);
 
-extern uint16_t keymaps[][KEYBOARD_COLS_MAX][KEYBOARD_ROWS];
+extern const uint16_t keymaps[][KEYBOARD_COLS_MAX][KEYBOARD_ROWS];
 
 struct key_pos {
 	uint8_t row;

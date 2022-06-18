@@ -58,45 +58,6 @@ const uint16_t keymaps[][KEYBOARD_COLS_MAX][KEYBOARD_ROWS] = {
         ),
 };
 
-#define CPUTS(outstr) cputs(CC_KEYBOARD, outstr)
-#define CPRINTS(format, args...) cprints(CC_KEYBOARD, format, ## args)
-#define CPRINTF(format, args...) cprintf(CC_KEYBOARD, format, ## args)
-
-static uint8_t scancode_pause[] = {0xE1, 0x14, 0x77, 0xE1, 0xF0, 0x14, 0xF0, 0x77};
-static uint8_t scancode_break[] = {0xE0, 0x7E, 0xE0, 0xF0, 0x7E};
-static uint8_t scancode_prtsc_make[]  = {0xE0, 0x12, 0xE0, 0x7C};
-static uint8_t scancode_prtsc_break[] = {0xE0, 0xF0, 0x7C, 0xE0, 0xF0, 0x12};
-
-bool process_record_kb(uint16_t keycode, keyrecord_t* record) {
-	switch (keycode) {
-		case KC_PAUS:
-			if (record->event.pressed)
-				simulate_scancodes_set2(scancode_pause, sizeof(scancode_pause), 0);
-			return false;
-		case KC_CTBR:
-			if (record->event.pressed)
-				simulate_scancodes_set2(scancode_break, sizeof(scancode_break), 0);
-			return false;
-		case KC_PSCR:
-			if (record->event.pressed) {
-				simulate_scancodes_set2(scancode_prtsc_make, sizeof(scancode_prtsc_make), 1);
-			} else {
-				simulate_scancodes_set2(scancode_prtsc_break, sizeof(scancode_prtsc_break), 0);
-			}
-			return false;
-	}
-	return true;
-}
-
-/*
-static uint8_t brightness_levels[] = {
-	0,
-	20,
-	50,
-	100
-};
-*/
-
 enum backlight_brightness {
 	KEYBOARD_BL_BRIGHTNESS_OFF = 0,
 	KEYBOARD_BL_BRIGHTNESS_LOW = 20,
@@ -112,13 +73,10 @@ bool process_record_user(uint16_t keycode, keyrecord_t* record) {
 			// We use XOR here to turn it off while held if function lock
 			// has turned it on
 			layer_invert(_FN_ANY);
-			CPUTS("~LAY 1 ");
 			if (record->event.pressed) {
 				layer_on(_FN_PRESSED);
-				CPUTS("+LAY 2\n");
 			} else {
 				layer_off(_FN_PRESSED);
-				CPUTS("-LAY 2\n");
 			}
 			return false;
 		}
@@ -178,6 +136,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t* record) {
 
 static void keyboard_overdrive_shutdown(void) {
 	// Preserve the state of the FN key layer
+	// TODO: KO API for saved state
 	system_set_bbram(SYSTEM_BBRAM_IDX_KEYBOARD_OVERDRIVE_STATE, layer_state_is(_FN_ANY));
 	layer_off(_FN_ANY);
 }
