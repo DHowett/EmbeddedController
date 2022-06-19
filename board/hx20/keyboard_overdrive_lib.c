@@ -30,7 +30,7 @@ static const uint8_t s_keyCodeToCompressedScanCodeMapping[] = {
 	[KC_S] = 0x1B,         [KC_T] = 0x2C,         [KC_U] = 0x3C,         [KC_V] = 0x2A,         [KC_W] = 0x1D,         [KC_X] = 0x22,         [KC_Y] = 0x35,
 	[KC_Z] = 0x1A,         [KC_BS] = 0x66,        [KC_BSLS] = 0x5D,      [KC_CAPS] = 0x58,      [KC_COMM] = 0x41,      [KC_INS] = _E0(0x70),  [KC_DEL] = _E0(0x71),
 	[KC_DOT] = 0x49,       [KC_DOWN] = _E0(0x72), [KC_END] = _E0(0x69),  [KC_ENT] = 0x5A,       [KC_EQL] = 0x55,       [KC_ESC] = 0x76,       [KC_GRV] = 0x0E,
-	[KC_HOME] = _E0(0x6C), [KC_LALT] = 0x11,      [KC_LBRC] = 0x54,      [KC_LCTL] = 0x14,      [KC_LEFT] = _E0(0x6B), [KC_LSFT] = 0x12,      [KC_LWIN] = _E0(0x1F),
+	[KC_HOME] = _E0(0x6C), [KC_LALT] = 0x11,      [KC_LBRC] = 0x54,      [KC_LCTL] = 0x14,      [KC_LEFT] = _E0(0x6B), [KC_LSFT] = 0x12,      [KC_LGUI] = _E0(0x1F),
 	[KC_MENU] = _E0(0x2F), [KC_MINS] = 0x4E,      [KC_NLCK] = 0x77,      [KC_NUBS] = 0x61,      [KC_QUOT] = 0x52,      [KC_RALT] = _E0(0x11), [KC_RBRC] = 0x5B,
 	[KC_RCTL] = _E0(0x14), [KC_RGHT] = _E0(0x74), [KC_RSFT] = 0x59,      [KC_SCLN] = 0x4C,      [KC_SLSH] = 0x4A,      [KC_SPC] = 0x29,       [KC_TAB] = 0x0D,
 	[KC_UP] = _E0(0x75),   [KC_F1] = 0x05,        [KC_F2] = 0x06,        [KC_F3] = 0x04,        [KC_F4] = 0x0C,        [KC_F5] = 0x03,        [KC_F6] = 0x0B,
@@ -124,15 +124,17 @@ static uint16_t mod_scancodes[] = {
 	[1 /*MOD_LALT*/] = 0x11, 
 	[2 /*MOD_LSFT*/] = 0x13,
 	[3 /*MOD_LGUI*/] = 0xE01F,
-	//[MOD_RCTL] = 0xE014,
-	//[MOD_RALT] = 0xE011,
-	//[MOD_RGUI] = 0xE027,
+	[4 /*MOD_RCTL*/] = 0xE014,
+	[5 /*MOD_RALT*/] = 0xE011,
+	[6 /*MOD_RSFT*/] = 0x59,
+	[7 /*MOD_RGUI*/] = 0xE027,
 };
 
 static void simulate_mods(uint8_t mods, struct key_record* record) {
-	for(int i = 0; i < sizeof(mod_scancodes); ++i) {
+	uint8_t offset = (mods & 0b10000) ? 4 : 0; // having any right modifiers makes all modifiers right
+	for(int i = 0; i < 4; ++i) {
 		if (mods & (1<<i)) {
-			simulate_keyboard(mod_scancodes[i], record->event.pressed);
+			simulate_keyboard(mod_scancodes[offset+i], record->event.pressed);
 		}
 	}
 }
@@ -152,7 +154,12 @@ bool process_record(uint16_t keycode, struct key_record* record) {
 
 	switch (KEY_GET_OP(keycode)) {
 		case OP_NONE: {
+			uint8_t mods = KEY_GET_MOD(keycode);
+			if (mods && record->event.pressed) // Send before on press
+				simulate_mods(mods, record);
 			send_kc_sc(keycode, record);
+			if (mods && !record->event.pressed) // Send after on release
+				simulate_mods(mods, record);
 			return false;
 		}
 		case OP_MOD_TAP: {
