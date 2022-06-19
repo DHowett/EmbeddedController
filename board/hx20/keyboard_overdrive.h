@@ -10,6 +10,10 @@ enum _opcode {
 	OP_MOD_TAP      = 0b001, // OP 3, MOD 5, KEY 8
 	OP_LAYER_TAP    = 0b010, // OP 3, LAY 5, KEY 8, +press -release
 	OP_LAYER_TOGGLE = 0b011, // OP 3, LAY 5, ___ 8, toggles on release
+			//0b100
+			//0b101
+			//0b110
+	OP_SPECIAL      = 0b111
 };
 
 enum _modifier {
@@ -43,7 +47,7 @@ enum _modifier {
 
 enum _keycode {
 	KC_NO = 0,
-	KC_TRANSPARENT = 0xFFFF,
+	KC_TRANSPARENT = 0xFFFF, // OP_SPECIAL | 0x1FFF
 	KC_A = 0x1,
 	KC_B,
 	KC_C,
