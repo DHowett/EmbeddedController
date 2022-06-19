@@ -54,6 +54,33 @@ static layer_state_t base_layers   = 0b00000001;
 static layer_state_t active_layers = 0b00000000;
 
 // This is used to cache which layer a pressed key came from
+#ifdef KO_COMPRESSED_CACHE
+// KO_COMPRESSED_CACHE costs 128 bytes of flash but saves 80 bytes of RAM.
+// Uncompressed table: 128 bytes (RAM)
+//   Compressed table: 48  bytes (RAM)
+//       Bitwise code: 128 bytes extra (Flash)
+uint8_t act_pressed_layers[(KEYBOARD_COLS_MAX * KEYBOARD_ROWS + 7)/8][LAYER_BITS] = {{0}};
+
+static void set_pressed_layer(uint8_t row, uint8_t col, uint8_t layer) {
+	uint8_t keyNum = row * KEYBOARD_COLS_MAX + col;
+	int cidx = keyNum / 8;
+	int rbit = keyNum % 8;
+	for(int i = 0; i < LAYER_BITS; ++i) {
+		act_pressed_layers[cidx][i] ^= (-((layer & (1U << i)) != 0) ^ act_pressed_layers[cidx][i]) & (1U << rbit);
+	}
+}
+
+static uint8_t get_pressed_layer(uint8_t row, uint8_t col) {
+	uint8_t keyNum = row * KEYBOARD_COLS_MAX + col;
+	int cidx = keyNum / 8;
+	int rbit = keyNum % 8;
+	uint8_t layer = 0;
+	for(int i = 0; i < LAYER_BITS; ++i) {
+		layer |= ((act_pressed_layers[cidx][i] & (1U << rbit)) != 0) << i;
+	}
+	return layer;
+}
+#else
 uint8_t act_pressed_layers[KEYBOARD_COLS_MAX][KEYBOARD_ROWS] = {{0}};
 static void set_pressed_layer(uint8_t row, uint8_t col, uint8_t layer) {
 	act_pressed_layers[col][row] = layer;
@@ -62,6 +89,7 @@ static void set_pressed_layer(uint8_t row, uint8_t col, uint8_t layer) {
 static uint8_t get_pressed_layer(uint8_t row, uint8_t col) {
 	return act_pressed_layers[col][row];
 }
+#endif
 
 static uint16_t get_keycode_at_pos(uint8_t row, uint8_t col, uint8_t* layer) {
 	uint16_t kc = KC_NO;
