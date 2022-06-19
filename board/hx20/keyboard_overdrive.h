@@ -6,29 +6,34 @@
 #define LAYER_BITS 3
 
 enum _opcode {
-	OP_NONE         = 0b0000, // OP 4, MOD 4, KEY 8
-	OP_MOD_TAP      = 0b0001, // OP 4, MOD 4, KEY 8
-	OP_LAYER_TAP    = 0b0010, // OP 4, LAY 4, KEY 8, +press -release
-	OP_LAYER_TOGGLE = 0b0011, // OP 4, LAY 4, ___ 8, toggles on release
+	OP_NONE         = 0b000, // OP 3, MOD 5, KEY 8
+	OP_MOD_TAP      = 0b001, // OP 3, MOD 5, KEY 8
+	OP_LAYER_TAP    = 0b010, // OP 3, LAY 5, KEY 8, +press -release
+	OP_LAYER_TOGGLE = 0b011, // OP 3, LAY 5, ___ 8, toggles on release
 };
 
 enum _modifier {
-	MOD_LCTL = 0b0001,
-	MOD_LALT = 0b0010,
-	MOD_LSFT = 0b0100,
-	MOD_LGUI = 0b1000,
+	MOD_LCTL = 0b00001,
+	MOD_LALT = 0b00010,
+	MOD_LSFT = 0b00100,
+	MOD_LGUI = 0b01000,
+	MOD_RCTL = 0b10001,
+	MOD_RALT = 0b10010,
+	MOD_RSFT = 0b10100,
+	MOD_RGUI = 0b11000,
 	MOD_LWIN = MOD_LGUI,
+	MOD_RWIN = MOD_RGUI,
 };
 
-#define ACT(op, val) (op<<12|val)
-#define ACT_MOD_TAP(mod, key) ACT(OP_MOD_TAP, ((mod)&0xf)<<8|(key))
-#define ACT_LAYER_TAP(lay, key) ACT(OP_LAYER_TAP, ((lay)&0xf)<<8|(key))
-#define ACT_LAYER_TOGGLE(lay) ACT(OP_LAYER_TOGGLE, ((lay)&0xf)<<8)
-#define KEY_GET_OP(kv) (((kv)>>12)&0xf)
-#define KEY_GET_LAYER(kv) (((kv)>>8)&0xf)
+#define ACT(op, val) (op<<13|val)
+#define ACT_MOD_TAP(mod, key) ACT(OP_MOD_TAP, ((mod)&0x1f)<<8|(key))
+#define ACT_LAYER_TAP(lay, key) ACT(OP_LAYER_TAP, ((lay)&0x1f)<<8|(key))
+#define ACT_LAYER_TOGGLE(lay) ACT(OP_LAYER_TOGGLE, ((lay)&0x1f)<<8)
+#define KEY_GET_OP(kv) (((kv)>>13)&0x7)
+#define KEY_GET_LAYER(kv) (((kv)>>8)&0x1f)
 #define KEY_GET_KC(kv) ((kv)&0xff)
-#define KEY_GET_MOD(kv) (((kv)>>8)&0xf)
-#define ACT_MOD(mod, key) ACT(OP_NONE, ((mod)&0xf)<<8|(key))
+#define KEY_GET_MOD(kv) (((kv)>>8)&0x1f)
+#define ACT_MOD(mod, key) ACT(OP_NONE, ((mod)&0x1f)<<8|(key))
 
 // QMK compatibility
 #define MO(layer) ACT_LAYER_TAP(layer, 0)
