@@ -54,26 +54,13 @@ static layer_state_t base_layers   = 0b00000001;
 static layer_state_t active_layers = 0b00000000;
 
 // This is used to cache which layer a pressed key came from
-uint8_t act_pressed_layers[(KEYBOARD_COLS_MAX * KEYBOARD_ROWS + 7)/8][LAYER_BITS] = {{0}};
-
+uint8_t act_pressed_layers[KEYBOARD_COLS_MAX][KEYBOARD_ROWS] = {{0}};
 static void set_pressed_layer(uint8_t row, uint8_t col, uint8_t layer) {
-	uint8_t keyNum = row * KEYBOARD_COLS_MAX + col;
-	int cidx = keyNum / 8;
-	int rbit = keyNum % 8;
-	for(int i = 0; i < LAYER_BITS; ++i) {
-		act_pressed_layers[cidx][i] ^= (-((layer & (1U << i)) != 0) ^ act_pressed_layers[cidx][i]) & (1U << rbit);
-	}
+	act_pressed_layers[col][row] = layer;
 }
 
 static uint8_t get_pressed_layer(uint8_t row, uint8_t col) {
-	uint8_t keyNum = row * KEYBOARD_COLS_MAX + col;
-	int cidx = keyNum / 8;
-	int rbit = keyNum % 8;
-	uint8_t layer = 0;
-	for(int i = 0; i < LAYER_BITS; ++i) {
-		layer |= ((act_pressed_layers[cidx][i] & (1U << rbit)) != 0) << i;
-	}
-	return layer;
+	return act_pressed_layers[col][row];
 }
 
 static uint16_t get_keycode_at_pos(uint8_t row, uint8_t col, uint8_t* layer) {
