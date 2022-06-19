@@ -107,7 +107,7 @@ enum _keycode {
 	KC_LSFT,
 	KC_LGUI,
 	KC_RGUI,
-	KC_MENU,
+	KC_APP,
 	KC_MINS,
 	KC_NLCK,
 	KC_NUBS,
@@ -160,6 +160,7 @@ enum _keycode {
 	KC_MNXT,
 	KC_MPRV,
 	KC_MPLY,
+
 	KC_VOLD,
 	KC_VOLU,
 	KC_MUTE,
