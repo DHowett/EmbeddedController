@@ -13,7 +13,6 @@
 
 enum _ext_keycode {
 	FK_RFKL = SAFE_AREA, // RF Kill (Airplane Mode)
-	FK_PROJ, // Project (Win+P)
 	FK_BRNU, // Brightness Up
 	FK_BRND, // Brightness Down
 	FK_BKLT, // Keyboard Backlight
@@ -27,10 +26,11 @@ enum _layers {
 };
 
 #define FK_FLCK TG(_FN_ANY)
+#define FK_PROJ ACT_MOD(MOD_LGUI, KC_P) // WIN+P
 
 const uint16_t keymaps[][KEYBOARD_COLS_MAX][KEYBOARD_ROWS] = {
         [_BASE] = LAYOUT_framework_iso(
-                KC_ESC,       KC_MUTE, KC_VOLD, KC_VOLU, KC_MPRV, KC_MPLY, KC_MNXT, FK_BRND, FK_BRNU, FK_PROJ, FK_RFKL, KC_PSCR, KC_MSEL,    KC_DEL,
+                KC_ESC,       KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5,   KC_F6,   KC_F7,   KC_F8,   KC_F9,   KC_F10,  KC_F11,  KC_F12,     KC_DEL,
                 KC_GRV,     KC_1,    KC_2,    KC_3,    KC_4,    KC_5,    KC_6,    KC_7,    KC_8,    KC_9,    KC_0,    KC_MINS, KC_EQL,       KC_BS,
                 KC_TAB,       KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,    KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,    KC_LBRC, KC_RBRC,
                 KC_CAPS,        KC_A,    KC_S,    KC_D,    KC_F,    KC_G,    KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN, KC_QUOT, KC_BSLS,  KC_ENT,
@@ -39,7 +39,7 @@ const uint16_t keymaps[][KEYBOARD_COLS_MAX][KEYBOARD_ROWS] = {
                 KC_LCTL, FK_FN,   KC_LWIN, KC_LALT,                       KC_SPC,                        KC_RALT, KC_RCTL, KC_LEFT, KC_DOWN, KC_RGHT
         ),
         [_FN_ANY] = LAYOUT_framework_iso(
-                _______,      KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5,   KC_F6,   KC_F7,   KC_F8,   KC_F9,   KC_F10,  KC_F11,  KC_F12,     _______,
+                _______,      KC_MUTE, KC_VOLD, KC_VOLU, KC_MPRV, KC_MPLY, KC_MNXT, FK_BRND, FK_BRNU, FK_PROJ, FK_RFKL, KC_PSCR, KC_MSEL,    _______,
                 _______,    _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______,      _______,
                 _______,      _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______,
                 _______,        _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______,  _______,
@@ -65,6 +65,12 @@ enum backlight_brightness {
 	KEYBOARD_BL_BRIGHTNESS_HIGH = 100,
 };
 
+uint8_t layer_state_set_user(uint8_t state) {
+	bool light = !layer_state_cmp(state, _FN_ANY);
+	gpio_set_level(GPIO_CAP_LED_L, light ? 1 : 0);
+	return state;
+}
+
 bool process_record_user(uint16_t keycode, keyrecord_t* record) {
         switch (keycode) {
                 case FK_FN: { // FN
@@ -80,15 +86,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t* record) {
 			}
 			return false;
 		}
-		case FK_PROJ:
-			if (record->event.pressed) {
-				simulate_keyboard(SCANCODE_LEFT_WIN, 1);
-				simulate_keyboard(SCANCODE_P, 1);
-			} else {
-				simulate_keyboard(SCANCODE_P, 0);
-				simulate_keyboard(SCANCODE_LEFT_WIN, 0);
-			}
-			return false;
 		case FK_RFKL: // RF Kill - HID report
 			update_hid_key(HID_KEY_AIRPLANE_MODE, record->event.pressed);
 			return false;
