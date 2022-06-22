@@ -302,8 +302,8 @@ typedef struct key_record {
 // tap.count is 1 when the tap event fired
 // tap.count is 0 when the hold event fired
 
-__attribute__((weak)) bool process_record_user(uint16_t keycode, keyrecord_t* record);
-__attribute__((weak)) bool process_record_kb(uint16_t keycode, keyrecord_t* record);
+bool process_record_user(uint16_t keycode, keyrecord_t* record);
+bool process_record_kb(uint16_t keycode, keyrecord_t* record);
 
 #define KO_TAP_TERM 200 /* ms */
 struct ko_queued_event {
