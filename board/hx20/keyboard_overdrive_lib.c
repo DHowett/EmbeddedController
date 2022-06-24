@@ -92,23 +92,21 @@ static uint8_t get_pressed_layer(uint8_t row, uint8_t col) {
 #endif
 
 static uint16_t get_keycode_at_pos(uint8_t row, uint8_t col, uint8_t* layer) {
-	uint16_t kc = KC_NO;
-	uint8_t layers = base_layers | active_layers;
+	layer_state_t layers = base_layers | active_layers;
+
+	while(layers) {
+		int i = __fls(layers); // first non-zero bit = highest active layer
+		uint16_t kc = keymaps[i][col][row];
+		if (kc == KC_TRANSPARENT) {
+			layers ^= (1<<i); // mask it off so we get the next deepest layer
+			continue; // peer through this layer
+		}
+		*layer = i;
+		return kc;
+	}
 
 	*layer = 0;
-	for(int i = NUM_LAYERS_MAX - 1; i >= 0; --i) {
-		if (layers & (1<<i)) {
-			kc = keymaps[i][col][row];
-			*layer = i;
-			if (kc == KC_TRANSPARENT) {
-				continue; // peer through this layer
-			}
-			goto done;
-		}
-	}
-	kc = KC_NO;
-done:
-	return kc;
+	return KC_NO;
 }
 
 __attribute__((weak)) uint8_t layer_state_set_kb(uint8_t state) { return state; }
