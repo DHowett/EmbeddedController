@@ -1104,14 +1104,15 @@ void simulate_keyboard(uint16_t scancode, int is_pressed)
 		       &len);
 	ASSERT(len > 0);
 
-	if (is_pressed)
-		set_typematic_key(scan_code, len);
-	else
-		clear_typematic_key();
-
-	if (keystroke_enabled) {
+	if (keystroke_enabled)
 		i8042_send_to_host(len, scan_code, CHAN_KBD);
+
+	if (is_pressed) {
+		keyboard_wakeup();
+		set_typematic_key(scan_code, len);
 		task_wake(TASK_ID_KEYPROTO);
+	} else {
+		clear_typematic_key();
 	}
 }
 
@@ -1151,14 +1152,15 @@ void simulate_scancodes_set2(uint8_t* scan_code, int32_t len, uint8_t is_pressed
 	}
 	ASSERT(len > 0);
 
-	if (is_pressed)
-		set_typematic_key(translation_buffer, len);
-	else
-		clear_typematic_key();
-
-	if (keystroke_enabled) {
+	if (keystroke_enabled)
 		i8042_send_to_host(len, translation_buffer, CHAN_KBD);
+
+	if (is_pressed) {
+		keyboard_wakeup();
+		set_typematic_key(translation_buffer, len);
 		task_wake(TASK_ID_KEYPROTO);
+	} else {
+		clear_typematic_key();
 	}
 }
 #endif
