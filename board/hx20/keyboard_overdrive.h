@@ -4,6 +4,7 @@
 #define KEYBOARD_ROWS 8
 #define NUM_LAYERS_MAX 8
 #define LAYER_BITS 3
+#define KO_TAP_TERM 200 /* ms */
 
 enum _opcode {
 	OP_NONE         = 0b000, // OP 3, MOD 5, KEY 8
@@ -304,11 +305,4 @@ typedef struct key_record {
 
 bool process_record_user(uint16_t keycode, keyrecord_t* record);
 bool process_record_kb(uint16_t keycode, keyrecord_t* record);
-
-#define KO_TAP_TERM 200 /* ms */
-struct ko_queued_event {
-	timestamp_t ts;
-	bool cancelled;
-	uint16_t keycode;
-	struct key_record record;
-};
+bool process_record(uint16_t keycode, keyrecord_t* record);
