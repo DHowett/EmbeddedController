@@ -12,10 +12,7 @@
 #include "keyboard_backlight.h"
 
 enum _ext_keycode {
-	FK_RFKL = SAFE_AREA, // RF Kill (Airplane Mode)
-	FK_BRNU, // Brightness Up
-	FK_BRND, // Brightness Down
-	FK_BKLT, // Keyboard Backlight
+	FK_BKLT = SAFE_AREA, // Keyboard Backlight
 	FK_FN,
 };
 
@@ -39,7 +36,7 @@ const uint16_t keymaps[][KEYBOARD_COLS_MAX][KEYBOARD_ROWS] = {
                 KC_LCTL, FK_FN,   KC_LWIN, KC_LALT,                       KC_SPC,                        KC_RALT, KC_RCTL, KC_LEFT, KC_DOWN, KC_RGHT
         ),
         [_FN_ANY] = LAYOUT_framework_iso(
-                _______,      KC_MUTE, KC_VOLD, KC_VOLU, KC_MPRV, KC_MPLY, KC_MNXT, FK_BRND, FK_BRNU, FK_PROJ, FK_RFKL, KC_PSCR, KC_MSEL,    _______,
+                _______,      KC_MUTE, KC_VOLD, KC_VOLU, KC_MPRV, KC_MPLY, KC_MNXT, KC_BRND, KC_BRNU, FK_PROJ, KC_RFKL, KC_PSCR, KC_MSEL,    _______,
                 _______,    _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______,      _______,
                 _______,      _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______,
                 _______,        _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______,  _______,
@@ -86,15 +83,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t* record) {
 			}
 			return false;
 		}
-		case FK_RFKL: // RF Kill - HID report
-			update_hid_key(HID_KEY_AIRPLANE_MODE, record->event.pressed);
-			return false;
-		case FK_BRND: // Brightness Down - HID report
-			update_hid_key(HID_KEY_DISPLAY_BRIGHTNESS_DN, record->event.pressed);
-			return false;
-		case FK_BRNU: // Brightness Up - HID report
-			update_hid_key(HID_KEY_DISPLAY_BRIGHTNESS_UP, record->event.pressed);
-			return false;
 		case FK_BKLT: { // Backlight - Handled internally
 			if (record->event.pressed) {
 				uint8_t bl_brightness = kblight_get();
@@ -131,15 +119,13 @@ bool process_record_user(uint16_t keycode, keyrecord_t* record) {
 	return true;
 }
 
-static void keyboard_overdrive_shutdown(void) {
+void ko_suspend_user(void) {
 	// Preserve the state of the FN key layer
-	// TODO: KO API for saved state
 	system_set_bbram(SYSTEM_BBRAM_IDX_KEYBOARD_OVERDRIVE_STATE, layer_state_is(_FN_ANY));
 	layer_off(_FN_ANY);
 }
-DECLARE_HOOK(HOOK_CHIPSET_SHUTDOWN, keyboard_overdrive_shutdown, HOOK_PRIO_DEFAULT);
 
-void keyboard_overdrive_startup(void) {
+void ko_resume_user(void) {
 	uint8_t current_kb = 0;
 
 	if (system_get_bbram(SYSTEM_BBRAM_IDX_KEYBOARD_OVERDRIVE_STATE, &current_kb) == EC_SUCCESS) {
@@ -148,4 +134,3 @@ void keyboard_overdrive_startup(void) {
 		}
 	}
 }
-DECLARE_HOOK(HOOK_CHIPSET_STARTUP, keyboard_overdrive_startup, HOOK_PRIO_DEFAULT);

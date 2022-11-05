@@ -171,6 +171,10 @@ enum _keycode {
 	KC_PSCR,
 	KC_SLCK,
 
+	KC_BRND,
+	KC_BRNU,
+	KC_RFKL,
+
 	SAFE_AREA,
 
 	KC_LWIN = KC_LGUI,
@@ -305,4 +309,16 @@ typedef struct key_record {
 
 bool process_record_user(uint16_t keycode, keyrecord_t* record);
 bool process_record_kb(uint16_t keycode, keyrecord_t* record);
+bool process_record_proto(uint16_t keycode, keyrecord_t* record);
 bool process_record(uint16_t keycode, keyrecord_t* record);
+
+// Suspend and Resume hooks are called when the computer goes into sleep
+// and resumes from S3 or S0ix. They are also called during system boot and
+// shutdown, as the system transitions through all power states on the way up
+// or down.
+//
+// They will typically be used to toggle the states of LEDs.
+void ko_suspend_kb(void);
+void ko_suspend_user(void);
+void ko_resume_kb(void);
+void ko_resume_user(void);
