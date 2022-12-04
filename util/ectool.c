@@ -168,7 +168,7 @@ const char help_str[] =
 	"      Prints timing statisitcs relating to capture and matching\n"
 	"  fptemplate [<infile>|<index 0..2>]\n"
 	"      Add a template if <infile> is provided, else dump it\n"
-	"  fwchargelimit [<limit>]\n"
+	"  fwchargelimit [<limit> [once]]\n"
 	"      Set the Framework Laptop's battery charge limit, otherwise query it\n"
 	"  gpioget <GPIO name>\n"
 	"      Get the value of GPIO signal\n"
