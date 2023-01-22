@@ -252,6 +252,26 @@ static void power_button_released(uint64_t tnow)
  */
 static void set_initial_pwrbtn_state(void)
 {
+	if (system_jumped_to_this_image() &&
+	    chipset_in_state(CHIPSET_STATE_ON)) {
+		/*
+		 * Jumped to this image while the chipset was already on, so
+		 * simply reflect the actual power button state unless power
+		 * button pulse is disabled. If power button SMI pulse is
+		 * enabled, then it should be honored, else setting power
+		 * button to PCH could lead to x86 platform shutting down. If
+		 * power button is still held by the time control reaches
+		 * state_machine(), it would take the appropriate action there.
+		 */
+		if (power_button_is_pressed() && power_button_pulse_enabled) {
+			CPRINTS("PB init-jumped-held");
+			set_pwrbtn_to_pch(0, 0);
+		} else {
+			CPRINTS("PB init-jumped");
+		}
+		return;
+	}
+
 	pwrbtn_state = PWRBTN_STATE_INIT_ON;
 	CPRINTS("PB init-on");
 }

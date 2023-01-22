@@ -35,6 +35,8 @@
 #define CPUTS(outstr) cputs(CC_CHIPSET, outstr)
 #define CPRINTS(format, args...) cprints(CC_CHIPSET, format, ## args)
 
+#define IN_ALL_S0 (IN_PGOOD_PWR_VR | IN_PGOOD_PWR_3V5V | IN_PGOOD_VCCIN_AUX_VR | IN_PCH_SLP_S3_DEASSERTED | IN_PCH_SLP_S4_DEASSERTED | IN_PCH_SLP_S5_DEASSERTED | IN_PCH_SLP_SUS_DEASSERTED)
+
 static int forcing_shutdown;  /* Forced shutdown in progress? */
 static int custom_forcing_shutdown;
 
@@ -246,7 +248,21 @@ int board_chipset_power_on(void)
 
 enum power_state power_chipset_init(void)
 {
-	chipset_force_g3();
+	if (system_jumped_to_this_image()) {
+		int signals = power_get_signals();
+		CPRINTS("DH: sysjump PS=0x%x", signals);
+		if ((power_get_signals() & IN_ALL_S0) == IN_ALL_S0) {
+			/* Disable idle task deep sleep when in S0. */
+			//disable_sleep(SLEEP_MASK_AP_RUN);
+			CPRINTS("DH: In S0 state");
+			return POWER_S0;
+		} else {
+			CPRINTS("DH: forcing G3 state");
+			chipset_force_g3();
+		}
+	} else {
+		CPRINTS("DH: NO sysjump?");
+	}
 	return POWER_G3;
 }
 
@@ -559,6 +575,10 @@ enum power_state power_handle_state(enum power_state state)
 		gpio_set_level(GPIO_SYSON, 0);
 		hook_notify(HOOK_CHIPSET_SHUTDOWN);
 		cypd_set_power_active(POWER_S5);
+
+		/* Call hooks after we remove power rails */
+		hook_notify(HOOK_CHIPSET_SHUTDOWN_COMPLETE);
+
 		power_s5_up = 0;
 		return POWER_S5;
 		break;

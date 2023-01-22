@@ -110,11 +110,12 @@ int system_is_reboot_warm(void)
 	check_reset_cause();
 	reset_flags = system_get_reset_flags();
 
-	if ((reset_flags & EC_RESET_FLAG_RESET_PIN) ||
+	if (((reset_flags & EC_RESET_FLAG_RESET_PIN) ||
 		(reset_flags & EC_RESET_FLAG_POWER_ON) ||
 		(reset_flags & EC_RESET_FLAG_WATCHDOG) ||
 		(reset_flags & EC_RESET_FLAG_HARD) ||
-		(reset_flags & EC_RESET_FLAG_SOFT))
+		(reset_flags & EC_RESET_FLAG_SOFT)) &&
+		!(reset_flags & EC_RESET_FLAG_SYSJUMP))
 		return 0;
 	else
 		return 1;
