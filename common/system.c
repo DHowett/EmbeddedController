@@ -683,6 +683,7 @@ uint32_t flash_get_rw_offset(enum ec_image copy)
 	return CONFIG_EC_PROTECTED_STORAGE_OFF + CONFIG_RO_STORAGE_OFF;
 }
 
+extern void spi_mux_control(int enable);
 const struct image_data *system_get_image_data(enum ec_image copy)
 {
 	static struct image_data data;
@@ -715,9 +716,13 @@ const struct image_data *system_get_image_data(enum ec_image copy)
 	memcpy(&data, (const void *)addr, sizeof(data));
 	flash_lock_mapped_storage(0);
 #else
+	spi_mux_control(1);
 	/* Read the version struct from flash into a buffer. */
-	if (flash_read(addr, sizeof(data), (char *)&data))
+	if (flash_read(addr, sizeof(data), (char *)&data)) {
+		spi_mux_control(0);
 		return NULL;
+	}
+	spi_mux_control(0);
 #endif
 
 	/* Make sure the version struct cookies match before returning the
