@@ -40,6 +40,9 @@
  */
 #define HELLO_RESP(in_data) ((in_data) + 0x01020304)
 
+int ec_lfw_write(const uint8_t *buf, int offset, int size);
+int cmd_lfw_write(int argc, char *argv[]);
+
 /* Command line options */
 enum {
 	OPT_DEV = 1000,
@@ -10026,6 +10029,7 @@ int cmd_cec(int argc, char *argv[])
 
 /* NULL-terminated list of commands */
 const struct command commands[] = {
+	{"0lfw", cmd_lfw_write},
 	{"adcread", cmd_adc_read},
 	{"addentropy", cmd_add_entropy},
 	{"apreset", cmd_apreset},
@@ -10296,3 +10300,76 @@ out:
 	release_gec_lock();
 	return !!rv;
 }
+
+struct ec_params_lfw_patch_request {
+	uint16_t offset;
+	uint8_t count;
+} __ec_align1;
+int ec_lfw_write(const uint8_t *buf, int offset, int size)
+{
+	struct ec_params_lfw_patch_request *p =
+		(struct ec_params_lfw_patch_request *)ec_outbuf;
+	int write_size = 245;
+	int pdata_max_size = (int)(ec_max_outsize - sizeof(*p));
+	int step;
+	int rv;
+	int i;
+
+	step = (pdata_max_size / write_size) * write_size;
+
+	if (!step) {
+		fprintf(stderr, "Write block size %d > max param size %d\n",
+			write_size, pdata_max_size);
+		return -1;
+	}
+
+	/* Write data in chunks */
+	printf("Write size %d...\n", step);
+
+	for (i = 0; i < size; i += step) {
+		p->offset = offset + i;
+		p->count = MIN(size - i, step);
+		memcpy(p + 1, buf + i, p->count);
+		rv = ec_command(0x3e81, 0, p, sizeof(*p) + p->count,
+				NULL, 0);
+		if (rv < 0) {
+			fprintf(stderr, "Write error at offset %d\n", i);
+			return rv;
+		}
+	}
+
+	return 0;
+}
+
+int cmd_lfw_write(int argc, char *argv[])
+{
+	int offset, size;
+	int rv;
+	char *buf;
+
+	if (argc < 2) {
+		fprintf(stderr, "Usage: %s <filename>\n", argv[0]);
+		return -1;
+	}
+
+	offset = 0;
+
+	/* Read the input file */
+	buf = read_file(argv[1], &size);
+	if (!buf)
+		return -1;
+
+	printf("Writing to offset %d...\n", offset);
+
+	/* Write data in chunks */
+	rv = ec_lfw_write(buf, offset, size);
+
+	free(buf);
+
+	if (rv < 0)
+		return rv;
+
+	printf("done.\n");
+	return 0;
+}
+

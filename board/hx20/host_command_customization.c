@@ -289,3 +289,21 @@ static enum ec_status standalone_mode(struct host_cmd_handler_args *args)
 
 }
 DECLARE_HOST_COMMAND(EC_CMD_STANDALONE_MODE, standalone_mode, EC_VER_MASK(0));
+
+struct ec_params_lfw_patch_request {
+	uint16_t offset;
+	uint8_t count;
+	uint8_t bytes[245];
+} __ec_align1;
+static enum ec_status reload_lfw(struct host_cmd_handler_args *args)
+{
+	const struct ec_params_lfw_patch_request *p = args->params;
+
+	if (p->count > 245 || (p->offset + p->count) > 4096) {
+		return EC_ERROR_INVAL;
+	}
+	memcpy((void*)(0xE0000 + p->offset), &p->bytes[0], p->count);
+	args->response_size = 0;
+	return EC_RES_SUCCESS;
+}
+DECLARE_HOST_COMMAND(0x3e81, reload_lfw, EC_VER_MASK(0));
