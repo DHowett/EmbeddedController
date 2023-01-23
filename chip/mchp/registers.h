@@ -23,6 +23,10 @@
 #define MCHP_CHIP_BASE      0x400fff00
 #define MCHP_CHIP_DEV_ID    REG8(MCHP_CHIP_BASE + 0x20)
 #define MCHP_CHIP_DEV_REV   REG8(MCHP_CHIP_BASE + 0x21)
+/* All in one */
+#define MCHP_CHIP_DEVRID32 REG32(MCHP_CHIP_BASE + 0x1C)
+#define MCHP_CHIP_REV_POS 0
+#define MCHP_CHIP_REV_MASK (0xfful << MCHP_CHIP_REV_POS)
 
 
 /* Power/Clocks/Resets */
