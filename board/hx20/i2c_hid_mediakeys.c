@@ -23,6 +23,7 @@
 
 #define REPORT_ID_RADIO				0x01
 #define REPORT_ID_CONSUMER		    0x02
+#define REPORT_ID_SYSCONTROL	0x03
 
 /*
  * See hid usage tables for consumer page
@@ -49,15 +50,20 @@ struct consumer_button_report {
 	uint16_t button_id;
 } __packed;
 
+struct syscontrol_report {
+	uint8_t state;
+} __packed;
+
 static struct radio_report radio_button;
 static struct consumer_button_report consumer_button;
-
+static struct syscontrol_report sys_control;
 
 int update_hid_key(enum media_key key, bool pressed)
 {
 	if (key >= HID_KEY_MAX) {
 		return EC_ERROR_INVAL;
 	}
+	if (key == HID_KEY_FN_LOCK) return EC_SUCCESS;
 	if (key == HID_KEY_AIRPLANE_MODE) {
 		key_states[key] = pressed;
 		if (pressed)
@@ -120,6 +126,25 @@ static const uint8_t report_desc[] = {
 	0x95, 0x01,	/*     Report Count (1) */
 	0x81, 0x00,	/*     Input (Data,Arr,Abs) */
 	0xC0,	    /*   END_COLLECTION */
+
+	/* New collection for FN key reporting */
+        0x05, 0x01,     // USAGE_PAGE (Generic Desktop)
+        0x09, 0x80,     // USAGE (System Control)
+        0xa1, 0x01,     // COLLECTION (Application)
+        0x85, REPORT_ID_SYSCONTROL,     // REPORT_ID (3)
+        0x15, 0x00,     // LOGICAL_MINIMUM (0)
+        0x25, 0x01,     // LOGICAL_MAXIMUM (1)
+        0x09, 0x97,     // USAGE (System Function Shift)
+        //0x19, 0x97,     // USAGE_MINIMUM (System Function Shift)
+        //0x29, 0x98,     // USAGE_MAXIMUM (System Function Shift Lock)
+        0x95, 0x01,     // REPORT_COUNT (1)
+        0x75, 0x01,     //   REPORT_SIZE (1)
+        0x81, 0x06,     // INPUT (Data,Var,Rel)
+        //0x75, 0x01,     // REPORT_SIZE (1)
+        //0x81, 0x26,     // INPUT (Data,Var,Rel,NPrf)
+        0x75, 0x07,     // REPORT_SIZE (6)
+        0x81, 0x03,     //   INPUT (Cnst,Var,Abs)
+        0xc0,           //         END_COLLECTION
 
 };
 
@@ -220,6 +245,12 @@ static int i2c_hid_touchpad_command_process(size_t len, uint8_t *buffer)
 						&consumer_button,
 						sizeof(struct consumer_button_report));
 			break;
+		case REPORT_ID_SYSCONTROL:
+			response_len =
+				fill_report(buffer, report_id,
+						&sys_control,
+						sizeof(struct syscontrol_report));
+			break;
 		default:
 			response_len = 2;
 			buffer[0] = response_len;
@@ -297,11 +328,16 @@ int i2c_hid_process(unsigned int len, uint8_t *buffer)
 				fill_report(buffer, REPORT_ID_RADIO,
 						&radio_button,
 						sizeof(struct radio_report));
-		} else {
+		} else if (input_mode == REPORT_ID_CONSUMER) {
 			response_len =
 				fill_report(buffer, REPORT_ID_CONSUMER,
 						&consumer_button,
 						sizeof(struct consumer_button_report));
+		} else if (input_mode == REPORT_ID_SYSCONTROL) {
+			response_len =
+				fill_report(buffer, REPORT_ID_SYSCONTROL,
+						&sys_control,
+						sizeof(struct syscontrol_report));
 		}
 		break;
 	case I2C_HID_COMMAND_REGISTER:
@@ -398,6 +434,14 @@ void hid_handler_task(void *p)
 					case HID_KEY_AIRPLANE_MODE:
 						input_mode = REPORT_ID_RADIO;
 							radio_button.state = key_states[i] ? 1 : 0;
+						break;
+					case HID_KEY_FN:
+						input_mode = REPORT_ID_SYSCONTROL;
+						sys_control.state ^= (-((bool)key_states[i]) ^ sys_control.state) & 0x01;
+						break;
+					case HID_KEY_FN_LOCK:
+						//input_mode = REPORT_ID_SYSCONTROL;
+						//sys_control.state ^= (-((bool)key_states[i]) ^ sys_control.state) & 0x02;
 						break;
 					}
 					hid_irq_to_host();
