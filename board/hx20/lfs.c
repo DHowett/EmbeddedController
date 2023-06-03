@@ -793,6 +793,7 @@ struct lfs_dir_traverse {
     struct lfs_diskoff disk;
 };
 
+__attribute__((noinline))
 static int lfs_dir_traverse(lfs_t *lfs,
         const lfs_mdir_t *dir, lfs_off_t off, lfs_tag_t ptag,
         const struct lfs_mattr *attrs, int attrcount,
@@ -5817,3 +5818,12 @@ int lfs_migrate(lfs_t *lfs, const struct lfs_config *cfg) {
 }
 #endif
 
+uint32_t lfs_crc(uint32_t crc, const void *buffer, size_t size) {
+    // it is assumed that the lfs machinery initializes crc with the initial value or the continuation value
+    const uint8_t *data = buffer;
+    for (size_t i = 0; i < size; i++) {
+        crc32_ctx_hash8(&crc, data[i]);
+    }
+
+    return crc; // EC will XOR this with 0xFFFFFFFF; we don't want that.
+}

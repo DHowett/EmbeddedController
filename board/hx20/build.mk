@@ -25,6 +25,9 @@ board-$(CONFIG_POWER_BUTTON_CUSTOM) += power_button_x86.o
 board-$(CONFIG_PECI) += peci_customization.o
 board-$(HAS_TASK_HOSTCMD) += host_command_customization.o
 board-$(CONFIG_I2C_HID_MEDIAKEYS) += i2c_hid_mediakeys.o
+#board-y += lfs.o filesystem.o
 
+$(out)/RO/board/hx20/lfs.o: CFLAGS+=-std=c99 -Wno-declaration-after-statement -Wno-unused-function -fstack-usage
+$(out)/RW/board/hx20/lfs.o: CFLAGS+=-std=c99 -Wno-declaration-after-statement -Wno-unused-function -fstack-usage
 
 

@@ -20,11 +20,20 @@
 #include LFS_STRINGIZE(LFS_CONFIG)
 #else
 
+#define LFS_NO_MALLOC
+#define LFS_NO_ASSERT
+#define LFS_NO_DEBUG
+#define LFS_NO_WARN
+#define LFS_NO_ERROR
+#define LFS_READONLY
+
 // System includes
-#include <stdint.h>
-#include <stdbool.h>
-#include <string.h>
-#include <inttypes.h>
+#include "stdint.h"
+#include "stdbool.h"
+#include "string.h"
+#include "inttypes.h"
+#include "util.h"
+#include "crc.h"
 
 #ifndef LFS_NO_MALLOC
 #include <stdlib.h>
@@ -150,13 +159,13 @@ static inline uint32_t lfs_ctz(uint32_t a) {
 
 // Count the number of binary ones in a
 static inline uint32_t lfs_popc(uint32_t a) {
-#if !defined(LFS_NO_INTRINSICS) && (defined(__GNUC__) || defined(__CC_ARM))
-    return __builtin_popcount(a);
-#else
+//#if !defined(LFS_NO_INTRINSICS) && (defined(__GNUC__) || defined(__CC_ARM))
+    //return __builtin_popcount(a);
+//#else
     a = a - ((a >> 1) & 0x55555555);
     a = (a & 0x33333333) + ((a >> 2) & 0x33333333);
     return (((a + (a >> 4)) & 0xf0f0f0f) * 0x1010101) >> 24;
-#endif
+//#endif
 }
 
 // Find the sequence comparison of a and b, this is the distance
@@ -236,6 +245,61 @@ static inline void lfs_free(void *p) {
 #endif
 }
 
+static inline char* strcpy(char* restrict d, char* restrict s) {
+	for (; (*d=*s); s++, d++);
+	return d;
+}
+
+static inline int strcmp(const char *l, const char *r)
+{
+	for (; *l==*r && *l; l++, r++);
+	return *(unsigned char *)l - *(unsigned char *)r;
+}
+static inline char *__strchrnul(const char *s, int c)
+{
+	c = (unsigned char)c;
+	if (!c) return (char *)s + strlen(s);
+
+	for (; *s && *(unsigned char *)s != c; s++);
+	return (char *)s;
+}
+static inline char *strchr(const char *s, int c)
+{
+	char *r = __strchrnul(s, c);
+	return *(unsigned char *)r == (unsigned char)c ? r : 0;
+}
+
+#define BITOP(a,b,op) \
+ ((a)[(size_t)(b)/(8*sizeof *(a))] op (size_t)1<<((size_t)(b)%(8*sizeof *(a))))
+
+static inline size_t strspn(const char *s, const char *c)
+{
+	const char *a = s;
+	size_t byteset[32/sizeof(size_t)] = { 0 };
+
+	if (!c[0]) return 0;
+	if (!c[1]) {
+		for (; *s == *c; s++);
+		return s-a;
+	}
+
+	for (; *c && BITOP(byteset, *(unsigned char *)c, |=); c++);
+	for (; *s && BITOP(byteset, *(unsigned char *)s, &); s++);
+	return s-a;
+}
+static inline size_t strcspn(const char *s, const char *c)
+{
+	const char *a = s;
+	size_t byteset[32/sizeof(size_t)];
+
+	if (!c[0] || !c[1]) return __strchrnul(s, *c)-a;
+
+	memset(byteset, 0, sizeof byteset);
+	for (; *c && BITOP(byteset, *(unsigned char *)c, |=); c++);
+	for (; *s && !BITOP(byteset, *(unsigned char *)s, &); s++);
+	return s-a;
+}
+#undef BITOP
 
 #ifdef __cplusplus
 } /* extern "C" */
