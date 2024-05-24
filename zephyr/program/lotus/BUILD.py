@@ -13,6 +13,7 @@ def register_lotus_project(
         project_name=project_name,
         zephyr_board=chip,
         dts_overlays=[here / project_name / "project.overlay"],
+        modules=["ec", "cmsis", "ko"],
         kconfig_files=[
             here / "program.conf",
             here / project_name / "project.conf",

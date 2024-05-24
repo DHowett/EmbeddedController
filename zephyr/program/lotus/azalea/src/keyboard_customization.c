@@ -21,6 +21,8 @@
 #include "system.h"
 #include "hid_device.h"
 
+#include <keyboard_overdrive.h>
+
 /* Console output macros */
 #define CPUTS(outstr) cputs(CC_KEYBOARD, outstr)
 #define CPRINTS(format, args...) cprints(CC_KEYBOARD, format, ## args)
@@ -487,4 +489,8 @@ enum ec_error_list keyboard_scancode_callback(uint16_t *make_code,
 		return r;
 
 	return EC_SUCCESS;
+}
+
+bool ko_platform_hook_are_layers_disabled(void) {
+	return (!*host_get_memmap(EC_CUSTOMIZED_MEMMAP_SYSTEM_FLAGS) & BIT(0));
 }
